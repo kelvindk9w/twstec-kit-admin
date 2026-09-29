@@ -1,0 +1,84 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "twstec/kit-admin",
+    "description": "Painel de super admin do TWS Laravel Starter Kit como plugin do Filament 5: usuários, chaves de API, projetos, uploads, logs de requisição, trilha de auditoria e configurações, login com verificação em duas etapas por e-mail, variantes de dashboard, trilha de auditoria de toda ação do painel (falha fechada) e as proteções de acesso (allowlist de IP, só admin com conta ativa) ligadas pelo pacote.",
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/kelvindk9w/tws-laravel-starter-kit",
+    "authors": [
+        {
+            "name": "TWS",
+            "homepage": "https://github.com/kelvindk9w"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/kelvindk9w/tws-laravel-starter-kit/issues",
+        "source": "https://github.com/kelvindk9w/tws-laravel-starter-kit/tree/desenvolvimento/packages/admin",
+        "docs": "https://github.com/kelvindk9w/tws-laravel-starter-kit/tree/desenvolvimento/docs"
+    },
+    "keywords": [
+        "laravel",
+        "filament",
+        "admin",
+        "audit-trail",
+        "security",
+        "starter-kit"
+    ],
+    "require": {
+        "php": "^8.4",
+        "filament/filament": "^5.7",
+        "laravel/framework": "^13.17",
+        "livewire/livewire": "^4.4",
+        "twstec/kit-auth": "^2.0",
+        "twstec/kit-foundation": "^2.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.27",
+        "orchestra/testbench": "^11.0",
+        "pestphp/pest": "^4.7",
+        "twstec/kit-accounts": "^2.0",
+        "twstec/kit-uploads": "^2.0"
+    },
+    "suggest": {
+        "twstec/kit-accounts": "Contas, chaves de API e projetos: com ele, o painel ganha as telas de contas, chaves e projetos, o filtro por conta da trilha e o modo sistema.",
+        "twstec/kit-uploads": "Uploads seguros: com ele, o painel ganha a tela de uploads, o widget dos últimos uploads e o campo de foto de perfil."
+    },
+    "autoload": {
+        "psr-4": {
+            "Twstec\\Kit\\Admin\\": "src/"
+        },
+        "files": [
+            "src/Compat/legacy-aliases.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Twstec\\Kit\\Admin\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Twstec\\Kit\\Admin\\AdminServiceProvider"
+            ]
+        },
+        "branch-alias": {
+            "dev-main": "2.x-dev"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "lint": "pint --test"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "platform": {
+            "php": "8.4.24"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

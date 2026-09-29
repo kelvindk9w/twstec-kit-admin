@@ -1,0 +1,19 @@
+/*
+   Fontes do twstec/kit-admin para o tema Tailwind do painel.
+
+   O pacote NÃO entrega CSS compilado: o tema do painel é do APLICATIVO
+   (os tokens de marca dele + o preset do Filament), compilado pelo Vite dele.
+   Este arquivo só diz ao Tailwind 4 onde estão as classes que as telas do
+   pacote usam (código PHP e views), para os utilitários entrarem no build.
+
+   Uso, no tema do painel do aplicativo (ex.: resources/css/filament.css):
+
+       @import '../../vendor/twstec/kit-admin/resources/css/sources.css';
+
+   Por ser um @import, um caminho errado ou o pacote fora do alcance do build
+   FALHA o build — em vez de gerar, em silêncio, um tema sem as classes do
+   painel (um @source para uma pasta que não existe não gera nada e não avisa).
+*/
+
+@source '../../src';
+@source '../views';
