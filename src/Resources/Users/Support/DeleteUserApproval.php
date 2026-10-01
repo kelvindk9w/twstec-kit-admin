@@ -7,6 +7,7 @@ namespace Twstec\Kit\Admin\Resources\Users\Support;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Twstec\Kit\Admin\Approvals\ApprovableAction;
+use Twstec\Kit\Admin\Approvals\ExecutionRefused;
 use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Support\UserModel;
@@ -21,8 +22,12 @@ use Twstec\Kit\Auth\Support\UserModel;
  *
  * As guardas são as MESMAS do caminho direto (UserAdminGuard::deleteDenial):
  * conta protegida, excluir a si mesmo, último admin/dono, dono de conta com
- * membros — conferidas no pedido (com quem pede) e de novo na aprovação
- * (com quem aprova: ninguém aprova a exclusão da própria conta).
+ * membros, impedimento de exclusão declarado pelo aplicativo — conferidas no
+ * pedido (com quem pede: o impedimento já recusa o pedido), de novo na
+ * aprovação (com quem aprova: ninguém aprova a exclusão da própria conta) e,
+ * na EXECUÇÃO, a recusa que só aparece na hora (impedimento novo, registro
+ * do aplicativo com chave estrangeira RESTRICT) vira pedido `failed` com a
+ * mensagem traduzida, nada apagado (UserAdminGuard::deleteRefusal).
  *
  * O retrato do estado olha o que muda o sentido da exclusão: e-mail,
  * situação, flag de acesso e papel. Se algum mudou depois do pedido, ele
@@ -76,9 +81,20 @@ final class DeleteUserApproval extends ApprovableAction
         ];
     }
 
+    /**
+     * A exclusão passa pelos MESMOS impedimentos do caminho direto, de novo
+     * na hora: impedimento declarado que surgiu depois do pedido, dona de
+     * conta com membros, ou registro do aplicativo que aponta para a pessoa
+     * (chave estrangeira RESTRICT, não declarada) → ExecutionRefused com a
+     * mensagem traduzida; o pedido fica `failed`, nada sai.
+     */
     public function execute(Model $subject, array $data, Authenticatable $actor): void
     {
-        $subject->delete();
+        $motivo = UserAdminGuard::deleteRefusal(fn (): bool => (bool) $subject->delete());
+
+        if (is_string($motivo)) {
+            throw new ExecutionRefused($motivo);
+        }
     }
 
     public function verb(): string

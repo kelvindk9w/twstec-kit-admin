@@ -296,7 +296,23 @@ dono (da conta, foto pessoal, órfão — com filtro); a de **Auditoria** filtra
 pela conta em que a ação aconteceu (`audit_events.tenant_uuid`, valor que não
 é uuid não derruba a consulta). Excluir uma pessoa pelo painel apaga os
 arquivos dela (regra do `twstec/kit-uploads`), com a linha `upload.erased` na
-trilha em nome do operador.
+trilha em nome do operador — menos o que está sob guarda legal, que fica
+desvinculado (tipo "Retido") com a recusa na trilha.
+
+Cada upload mostra a **classificação** (com filtro) e o **"guardar até"**.
+Abrir um **confidencial** é a ação "Abrir documento confidencial", com
+permissão própria `uploads.view_confidential` (fora de `*.view`): a URL nasce
+no clique e a geração e a visualização ficam na trilha com o contexto `admin`.
+As ações de **guarda legal** pedem `uploads.legal_hold`.
+
+**Excluir usuário** respeita os impedimentos de exclusão declarados pelo
+aplicativo (`twstec/kit-accounts`): a ação some com o motivo; e um registro do
+aplicativo que aponta para a pessoa com chave estrangeira `RESTRICT` sem ter
+sido declarado vira recusa limpa na hora (notificação + `denied` na trilha,
+nada apagado), não o erro do banco. Com a aprovação em dois passos
+(`users.delete`), o mesmo vale em cada passo: impedimento recusa o pedido; a
+recusa que só aparece na execução deixa o pedido `failed` com a mensagem
+traduzida (`Approvals\ExecutionRefused`), nada apagado.
 
 ## Nomes antigos → nomes novos
 

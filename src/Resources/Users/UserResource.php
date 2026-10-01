@@ -392,6 +392,21 @@ final class UserResource extends BaseResource
 
                     $action->cancel();
                 }
+            })
+            // A recusa que só aparece NA HORA (um impedimento que surgiu entre
+            // a tela e o clique, um registro do aplicativo que aponta para a
+            // pessoa sem ter sido declarado): mensagem limpa, `denied` na
+            // trilha, nada apagado — nunca o erro bruto do banco.
+            ->using(function (Model&AuthUser $record, DeleteAction $action): bool {
+                $motivo = UserAdminGuard::deleteRefusal(fn (): bool => (bool) $record->delete());
+
+                if (is_string($motivo)) {
+                    AdminAudit::denied($motivo, $record, 'deleted', __('admin.users.action_denied'));
+
+                    $action->cancel();
+                }
+
+                return $motivo === true;
             });
     }
 

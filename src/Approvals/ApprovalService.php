@@ -401,7 +401,8 @@ final class ApprovalService
     /**
      * Executa num ponto de salvamento: falhou, nada da execução fica e o
      * pedido vira `failed`; deu certo, `executed` — na mesma transação que
-     * segura a trava.
+     * segura a trava. Recusa de regra (ExecutionRefused) também vira
+     * `failed`, mas com a mensagem traduzida e a recusa na trilha do alvo.
      */
     private function run(ApprovalRequest $request, ApprovableAction $action, Model $subject, Authenticatable $actor): void
     {
@@ -411,6 +412,16 @@ final class ApprovalService
 
                 $action->execute($subject, (array) ($request->payload ?? []), $actor);
             });
+        } catch (ExecutionRefused $refused) {
+            // Recusa de regra (não defeito): o motivo traduzido no pedido e
+            // na trilha do alvo; nada é reportado como erro.
+            $motivo = Str::limit($this->redactor->redactString($refused->getMessage()), 500, '');
+
+            $this->transition($request, ApprovalStatus::Failed, 'failed', ['failure_reason' => $motivo]);
+
+            $this->trail->denied(AuditTrail::subjectType($subject).'.'.$action->verb(), $subject, $motivo);
+
+            return;
         } catch (Throwable $exception) {
             $this->transition($request, ApprovalStatus::Failed, 'failed', [
                 'failure_reason' => Str::limit($exception::class.': '.$this->redactor->redactString($exception->getMessage()), 500, ''),

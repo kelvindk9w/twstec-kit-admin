@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Twstec\Kit\Admin\Resources\Users\Support;
 
+use Closure;
 use Illuminate\Database\Eloquent\Model;
+use Twstec\Kit\Accounts\Account\Exceptions\OwnerOfSharedAccountException;
 use Twstec\Kit\Accounts\Account\Services\AccountService;
+use Twstec\Kit\Accounts\Deletion\DeletionImpediments;
+use Twstec\Kit\Accounts\Deletion\Exceptions\DeletionImpededException;
 use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Enums\UserStatus;
@@ -23,8 +27,9 @@ use Twstec\Kit\Foundation\Kit;
  *    excluído — o painel ficaria sem dono e só o comando `user:make-admin`
  *    (que exige shell no servidor) recuperaria o acesso;
  * 4. quem é DONO de conta com outros membros não é excluído — a propriedade
- *    é transferida antes (twstec/kit-accounts; sem o pacote, não há contas
- *    e a regra não se aplica);
+ *    é transferida antes — e quem tem IMPEDIMENTO DE EXCLUSÃO declarado pelo
+ *    aplicativo também não (twstec/kit-accounts, Deletion\DeletionImpediments;
+ *    sem o pacote, não há contas e a regra não se aplica);
  * 5. o último DONO do painel ativo (papel `super_role`) também não perde a
  *    flag, não é bloqueado nem excluído — sem ele, ninguém mais atribui
  *    papel nem mexe no que só o dono pode;
@@ -77,6 +82,28 @@ final class UserAdminGuard
         // Dono de conta com outros membros: a propriedade é transferida antes
         // (a mesma regra que o pacote de contas aplica no model e no banco).
         return Kit::has('accounts') ? app(AccountService::class)->deletionDenial($record) : null;
+    }
+
+    /**
+     * Roda a exclusão (já autorizada pela pré-checagem) e devolve `true` —
+     * ou o MOTIVO traduzido quando ela é recusada na hora: impedimento
+     * declarado que surgiu depois da tela, dona de conta com membros, ou um
+     * registro do aplicativo que aponta para a pessoa (chave estrangeira
+     * RESTRICT) — com a exclusão desfeita, nada apagado.
+     *
+     * @param  Closure(): bool  $delete
+     */
+    public static function deleteRefusal(Closure $delete): string|bool
+    {
+        if (! Kit::has('accounts')) {
+            return $delete();
+        }
+
+        try {
+            return DeletionImpediments::guardIntegrity($delete);
+        } catch (DeletionImpededException|OwnerOfSharedAccountException $exception) {
+            return $exception->getMessage();
+        }
     }
 
     /**
