@@ -7,6 +7,7 @@ namespace Twstec\Kit\Admin\Console;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Exceptions\AccountProtectedException;
 use Twstec\Kit\Auth\Support\UserModel;
@@ -34,13 +35,19 @@ use Twstec\Kit\Foundation\Audit\AuditTrail;
  * da aplicação para ser o ator, a linha leva o comando e o usuário do sistema
  * operacional no lugar do User-Agent (AuditScope::console).
  *
+ * PAPEL (2.0.0-beta.8): promover dá o papel de DONO do painel
+ * (`admin.authorization.super_role`) — é o caminho de resgate, quem roda tem
+ * o servidor — ou o papel de `--role`; rebaixar tira a flag E o papel. Papel
+ * desconhecido é recusado (e registrado).
+ *
  * Uso:
- *   php artisan user:make-admin email@exemplo.com          → promove
- *   php artisan user:make-admin email@exemplo.com --remove → rebaixa
+ *   php artisan user:make-admin email@exemplo.com                  → promove (dono)
+ *   php artisan user:make-admin email@exemplo.com --role=support   → promove com o papel
+ *   php artisan user:make-admin email@exemplo.com --remove         → rebaixa
  */
 final class MakeAdminUser extends Command
 {
-    protected $signature = 'user:make-admin {email : E-mail do usuário} {--remove : Revoga o acesso de admin}';
+    protected $signature = 'user:make-admin {email : E-mail do usuário} {--remove : Revoga o acesso de admin} {--role= : Papel no painel (padrão: o de dono)}';
 
     protected $description = 'Concede (ou revoga, com --remove) o acesso de super admin a um usuário';
 
@@ -70,12 +77,22 @@ final class MakeAdminUser extends Command
             return self::FAILURE;
         }
 
+        $role = $remove ? null : (string) ($this->option('role') ?: AdminPermissions::superRole());
+
+        if ($role !== null && ! AdminPermissions::exists($role)) {
+            $trail->denied('user.'.$verb, $user, __('admin.roles.unknown'));
+
+            $this->error(__('admin.roles.unknown'));
+
+            return self::FAILURE;
+        }
+
         try {
             // Promovido por quem opera o servidor: o e-mail passa a contar
             // como confirmado (mesma regra da conta criada pelo /admin), para
             // o novo admin não ficar preso no aviso de verificação do painel.
             // Rebaixar não mexe na verificação.
-            $changes = ['is_admin' => ! $remove];
+            $changes = ['is_admin' => ! $remove, AdminPermissions::COLUMN => $role];
 
             if (! $remove && $user->email_verified_at === null) {
                 $changes['email_verified_at'] = now();

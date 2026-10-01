@@ -29,6 +29,7 @@ use Twstec\Kit\Admin\Pages\Profile;
 use Twstec\Kit\Admin\Pages\Settings;
 use Twstec\Kit\Admin\Resources\Accounts\AccountResource;
 use Twstec\Kit\Admin\Resources\ApiKeys\ApiKeyResource;
+use Twstec\Kit\Admin\Resources\ApprovalRequests\ApprovalRequestResource;
 use Twstec\Kit\Admin\Resources\AuditEvents\AuditEventResource;
 use Twstec\Kit\Admin\Resources\Projects\ProjectResource;
 use Twstec\Kit\Admin\Resources\RequestLogs\RequestLogResource;
@@ -89,6 +90,7 @@ final class AdminPlugin implements Plugin
     public const RESOURCES = [
         AccountResource::class => 'accounts',
         ApiKeyResource::class => 'accounts',
+        ApprovalRequestResource::class => null,
         AuditEventResource::class => null,
         ProjectResource::class => 'accounts',
         RequestLogResource::class => null,

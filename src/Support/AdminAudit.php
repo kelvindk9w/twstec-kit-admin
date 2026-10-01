@@ -6,15 +6,19 @@ namespace Twstec\Kit\Admin\Support;
 
 use Filament\Notifications\Notification;
 use Filament\Pages\SimplePage;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Livewire\Component;
 use RuntimeException;
 use Throwable;
+use Twstec\Kit\Admin\Authorization\AdminAuthorization;
+use Twstec\Kit\Admin\Support\Exceptions\RecordedDenial;
 use Twstec\Kit\Foundation\Audit\AuditScope;
 use Twstec\Kit\Foundation\Audit\AuditTrail;
 use Twstec\Kit\Foundation\Audit\Enums\AuditContext;
 
+use function Livewire\before;
 use function Livewire\on;
 
 /**
@@ -68,6 +72,12 @@ final class AdminAudit
         'revoke' => 'revoked',
         'rotate' => 'rotated',
         'markEmailVerified' => 'email_marked_verified',
+        'assignRole' => 'role_changed',
+        'confirmAssignRole' => 'role_changed',
+        'approve' => 'approved',
+        'confirmApprove' => 'approved',
+        'reject' => 'rejected',
+        'execute' => 'executed',
     ];
 
     /**
@@ -77,10 +87,40 @@ final class AdminAudit
      */
     public static function register(): void
     {
+        // PERMISSÃO POR PAPEL, no servidor (Authorization\AdminAuthorization),
+        // em dois pontos:
+        //
+        // 1. ANTES de o componente hidratar — antes até do `hydrate()` do
+        //    próprio Filament, que recusaria a tela de edição/detalhe com um
+        //    403 sem deixar rastro: a tela e as chamadas que vieram no pedido
+        //    (lidas do corpo da requisição do Livewire) são conferidas aqui;
+        // 2. em cada chamada, depois de aplicadas as atualizações de
+        //    propriedade (um `mountedActions` mexido pelo cliente é visto
+        //    aqui) — e no caminho que não passa pelo endpoint (testes).
+        //
+        // Faltou permissão: linha `denied` na trilha e 403; nada roda.
+        on('request', function (array $payload): void {
+            AdminAuthorization::rememberRequest($payload);
+        });
+
+        before('hydrate', function (mixed $component): void {
+            if (! $component instanceof Component || ! self::covers($component) || ! auth()->check()) {
+                return;
+            }
+
+            $calls = AdminAuthorization::pendingCalls($component->getId());
+
+            foreach ($calls === [] ? [['method' => '', 'params' => []]] : $calls as $call) {
+                self::authorizeCall($component, $call['method'], $call['params']);
+            }
+        });
+
         on('call', function (Component $component, string $method, array $params): ?callable {
             if (! self::covers($component) || ! auth()->check()) {
                 return null;
             }
+
+            self::authorizeCall($component, $method, $params);
 
             $trail = app(AuditTrail::class);
 
@@ -103,6 +143,36 @@ final class AdminAudit
                 app(AuditTrail::class)->restore(null);
             }
         });
+    }
+
+    /**
+     * Recusa (403 + `denied` na trilha, no escopo da própria chamada) a
+     * chamada que pede o que o papel não dá.
+     *
+     * @param  array<int, mixed>  $params
+     */
+    private static function authorizeCall(Component $component, string $method, array $params): void
+    {
+        $missing = AdminAuthorization::missingFor(auth()->user(), $component, $method, $params);
+
+        if ($missing === null) {
+            return;
+        }
+
+        $trail = app(AuditTrail::class);
+
+        $previous = $trail->begin(AuditScope::fromRequest(
+            AuditContext::Admin,
+            self::verbFor($component, $method === '' ? 'view' : $method, $params),
+        ));
+
+        try {
+            AdminAuthorization::recordDenial($component, $method, $params, $missing);
+        } finally {
+            $trail->restore($previous);
+        }
+
+        abort(403, __('admin.authorization.denied', ['permission' => $missing]));
     }
 
     /**
@@ -196,6 +266,64 @@ final class AdminAudit
             : $notification->title($title)->body($reason);
 
         $notification->send();
+    }
+
+    /**
+     * Avisa o operador de uma recusa que JÁ ESTÁ na trilha — registrada pelo
+     * próprio serviço que recusou (Approvals\ApprovalService,
+     * Authorization\AdminRoles), que é a barreira de servidor também fora do
+     * painel. Só aceita a exceção desses serviços: não serve para recusar sem
+     * registrar.
+     */
+    public static function notifyRecorded(RecordedDenial $denial, ?string $title = null): void
+    {
+        $notification = Notification::make()->danger();
+
+        $title === null
+            ? $notification->title($denial->getMessage())
+            : $notification->title($title)->body($denial->getMessage());
+
+        $notification->send();
+    }
+
+    /**
+     * Roda um serviço do painel (papéis, aprovações) dentro de um escopo de
+     * auditoria — o da chamada Livewire em curso, renomeado para `$verb`, ou
+     * um novo quando o serviço é chamado de fora do painel (comando, job,
+     * teste): a trilha não depende de quem chamou.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public static function within(string $verb, callable $callback, ?Authenticatable $actor = null): mixed
+    {
+        $trail = app(AuditTrail::class);
+
+        if ($trail->current() !== null) {
+            $trail->describeAs($verb);
+
+            return $callback();
+        }
+
+        if (auth()->check() && ($actor === null || auth()->id() === $actor->getAuthIdentifier())) {
+            return $trail->within(AuditScope::fromRequest(AuditContext::Admin, $verb), $callback);
+        }
+
+        // Fora de uma requisição do painel (comando, job): o ator é quem o
+        // serviço recebeu, e o "cliente" é o console.
+        $console = AuditScope::console('admin', $verb);
+
+        return $trail->within(new AuditScope(
+            context: $console->context,
+            actorUuid: $actor instanceof Model && is_string($actor->getAttribute('uuid')) ? $actor->getAttribute('uuid') : null,
+            actorIsAdmin: $actor instanceof Model ? (bool) $actor->getAttribute('is_admin') : null,
+            correlationId: $console->correlationId,
+            ip: null,
+            userAgent: $console->userAgent,
+            verb: $verb,
+        ), $callback);
     }
 
     /**

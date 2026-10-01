@@ -179,13 +179,14 @@ abstract class TestCase extends Testbench
     }
 
     /**
-     * Administrador ativo, com e-mail confirmado.
+     * Administrador ativo, com e-mail confirmado — DONO do painel (papel
+     * `owner`), como quem é promovido pelo `user:make-admin`.
      *
      * @param  array<string, mixed>  $attributes
      */
     protected function admin(array $attributes = []): User
     {
-        return User::fixture(['is_admin' => true, ...$attributes]);
+        return User::fixture(['is_admin' => true, 'admin_role' => 'owner', ...$attributes]);
     }
 
     /**

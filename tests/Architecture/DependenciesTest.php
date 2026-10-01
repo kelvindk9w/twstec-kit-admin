@@ -48,7 +48,7 @@ const ADMIN_ALLOWED_ROOTS = [
     'Carbon\\',
 ];
 
-const ADMIN_SHIPPED_DIRECTORIES = ['src', 'config', 'lang'];
+const ADMIN_SHIPPED_DIRECTORIES = ['src', 'config', 'database', 'lang'];
 
 function adminRoot(): string
 {

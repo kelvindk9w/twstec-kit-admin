@@ -43,7 +43,9 @@ garante isso.
 | `Access\AdminAccess`, `Concerns\AccessesAdminPanel`, `Http\Middleware\EnsureAdminPanelAccess` | Quem entra: `is_admin` + conta ativa — o critério, a trait do `canAccessPanel` e a conferência do pacote |
 | `Resources\Users\Support\UserAdminGuard`, `MarkEmailVerifiedAction` | Guardas de servidor (conta protegida, a própria conta, o último admin ativo) e a ação de suporte |
 | `Support\AvatarUpload` | O campo de foto: grava pela função global de upload (foto pessoal) e só vincula upload da própria pessoa |
-| `Console\MakeAdminUser` | `php artisan user:make-admin email [--remove]` — o resgate de acesso, auditado no contexto console |
+| `Authorization\AdminPermissions`, `AdminAuthorization`, `AdminRoles` | Papéis e permissões do painel: o critério (`admin.authorization.roles`), a checagem de servidor em toda chamada Livewire (403 + `denied` na trilha) e a atribuição de papel (ação sensível, sem escalada) |
+| `Approvals\…`, `Resources\ApprovalRequests\…` | Aprovação em dois passos: `ApprovableAction`, `Approvals::register()`/`gate()`, o `ApprovalService` (quatro olhos ou um operador, uma execução só, sob trava) e a tela "Aprovações" |
+| `Console\MakeAdminUser` | `php artisan user:make-admin email [--role=papel] [--remove]` — o resgate de acesso (papel de dono por padrão), auditado no contexto console |
 
 ## Módulos opcionais: o painel se adapta
 
@@ -165,6 +167,29 @@ novo (`admin.faturas`, por exemplo) vai no `lang/admin.php` do aplicativo.
    do pacote cobra as duas no código dele; o starter cobra no dele, e a suíte
    da demonstração (twstec/kit-demo) no dela.
 
+## Papéis, permissões e aprovação em dois passos
+
+Entrar no painel é `is_admin` + conta ativa; o que se faz lá dentro vem do
+**papel** (`admin_role`, migration do pacote — quem já era admin vira
+`owner`). Os papéis ficam em `config/admin.php` (`owner`, `operations`,
+`support`, `auditor` de fábrica), com permissões `<recurso>.<ação>` e
+curinga. A checagem é **no servidor**, em toda chamada Livewire de tela do
+painel: faltou a permissão, 403 e linha `denied` na trilha. Atribuir papel é
+ação sensível (senha de transação + código), auditada e sem escalada.
+
+Ação de alto impacto pode exigir **aprovação em dois passos**: declare uma
+`ApprovableAction`, registre com `Approvals::register()`, passe a Action do
+Filament por `Approvals::gate()` e ligue em `ADMIN_APPROVALS_ACTIONS`. Modo
+quatro olhos (padrão) ou um operador (ação sensível + espera mínima). O kit
+traz "excluir usuário" como exemplo (`ADMIN_APPROVALS_ACTIONS=users.delete`).
+
+Guia completo, com o passo a passo de declarar uma ação num resource novo:
+[docs/admin-e-dashboards.md](https://github.com/kelvindk9w/tws-laravel-starter-kit/blob/desenvolvimento/docs/admin-e-dashboards.md#papéis-e-permissões-no-admin).
+
+Opt-outs só explícitos, com aviso no log a cada boot:
+`ADMIN_AUTHORIZATION=false` (volta o tudo-ou-nada),
+`ADMIN_APPROVALS_MODE=single_operator`, `ADMIN_APPROVALS_SENSITIVE=false`.
+
 ## O que ele liga sozinho
 
 Em **todo painel que registra o plugin**, sem nenhuma linha no aplicativo e
@@ -191,6 +216,8 @@ painéis):
   recusada fica registrada.
 - **Trilha de auditoria** das ações do painel (`AdminAudit`, ligada no boot do
   provider) e o **segundo fator** por e-mail no login.
+- **Papéis** — a permissão de cada tela e de cada Action conferida no
+  servidor, pelo mesmo gancho da trilha (`AdminAuthorization`).
 - **Modo sistema das contas** (`twstec/kit-accounts`) — o painel vê projetos e
   chaves de **todas** as contas: o `OperateAdminPanelAsSystem` entra na
   autenticação do painel, depois do acesso de admin, e é persistente. Ele
@@ -309,7 +336,10 @@ Livewire e no download de exports, a barreira em primeiro lugar em qualquer
 ordem do `PanelProvider`, criar/editar/excluir/bloquear usuário gravando a
 linha com quem, registro, antes/depois redigido, IP, User-Agent e
 `correlation_id`, recusa como `denied`, falha fechada, contas protegidas,
-`user:make-admin`, foto só de upload da própria conta, nomes antigos,
+`user:make-admin`, foto só de upload da própria conta, a matriz de
+permissões por papel no servidor (inclusive a chamada forjada: 403 + `denied`),
+atribuição de papel sem escalada, o último dono protegido, a aprovação em dois
+passos (quatro olhos, um operador, vencido, estado mudado, falha), nomes antigos,
 traduções (o aplicativo vence) e a arquitetura (só os pacotes do kit, o
 Laravel, o Filament e o Livewire).
 

@@ -15,6 +15,8 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\DB;
+use Twstec\Kit\Admin\Authorization\AdminPermissions;
+use Twstec\Kit\Admin\Authorization\Contracts\GuardedByPermission;
 use Twstec\Kit\Foundation\Settings\SettingsManager;
 
 /**
@@ -29,8 +31,12 @@ use Twstec\Kit\Foundation\Settings\SettingsManager;
  * TRILHA DE AUDITORIA: cada chave que muda vira uma linha `setting.changed`
  * com o de/para — quem grava é o SettingsManager (nulo = sem sobreposição,
  * vale o .env). Chave que não mudou não gera linha.
+ *
+ * PERMISSÕES: abrir pede `settings.view`; salvar, `settings.update` —
+ * conferido no servidor pela checagem central (AdminAuthorization). Sem
+ * `update`, o formulário aparece só para leitura.
  */
-final class Settings extends Page implements HasForms
+final class Settings extends Page implements GuardedByPermission, HasForms
 {
     use InteractsWithForms;
 
@@ -40,6 +46,29 @@ final class Settings extends Page implements HasForms
 
     /** @var array<string, mixed>|null */
     public ?array $data = [];
+
+    public static function permissionKey(): string
+    {
+        return 'settings';
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
+    public static function actionAbilities(): array
+    {
+        return [];
+    }
+
+    public static function canAccess(): bool
+    {
+        return AdminPermissions::allows(auth()->user(), 'settings.view');
+    }
+
+    public function canSave(): bool
+    {
+        return AdminPermissions::allows(auth()->user(), 'settings.update');
+    }
 
     public static function getNavigationLabel(): string
     {
@@ -114,7 +143,7 @@ final class Settings extends Page implements HasForms
                 ->schema($fields);
         }
 
-        return $schema->components($sections)->statePath('data');
+        return $schema->components($sections)->statePath('data')->disabled(fn (): bool => ! $this->canSave());
     }
 
     public function save(SettingsManager $settings): void

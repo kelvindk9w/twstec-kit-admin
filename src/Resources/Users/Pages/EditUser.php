@@ -8,6 +8,8 @@ use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
 use Filament\Support\Exceptions\Halt;
 use Illuminate\Database\Eloquent\Model;
+use Twstec\Kit\Admin\Authorization\AdminPermissions;
+use Twstec\Kit\Admin\Resources\Users\Concerns\AssignsAdminRole;
 use Twstec\Kit\Admin\Resources\Users\Support\UserAdminGuard;
 use Twstec\Kit\Admin\Resources\Users\UserResource;
 use Twstec\Kit\Admin\Support\AdminAudit;
@@ -21,10 +23,15 @@ use Twstec\Kit\Auth\Contracts\AuthUser;
  * intocável, o admin não se bloqueia e o último admin ativo não perde a
  * flag nem o acesso — esconder o botão não é proteção.
  *
- * `status`/`is_admin` gravados por forceFill (nunca mass assignment).
+ * `status`/`is_admin` gravados por forceFill (nunca mass assignment). Tirar
+ * a flag de acesso tira também o papel (`admin_role`): a pessoa não volta
+ * ao painel com o papel antigo quando alguém lhe devolver a entrada. O papel
+ * em si muda só pela ação sensível "Alterar papel" (AssignsAdminRole).
  */
 final class EditUser extends EditRecord
 {
+    use AssignsAdminRole;
+
     protected static string $resource = UserResource::class;
 
     /**
@@ -49,6 +56,7 @@ final class EditUser extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            $this->assignRoleAction(),
             UserResource::deleteAction(),
         ];
     }
@@ -95,8 +103,14 @@ final class EditUser extends EditRecord
             'name' => $data['name'],
             'email' => $data['email'],
             'status' => $data['status'],
-            'is_admin' => (bool) ($data['is_admin'] ?? false),
+            // Campo desabilitado (quem edita não atribui papel) não vem no
+            // formulário: a flag fica como está.
+            'is_admin' => array_key_exists('is_admin', $data) ? (bool) $data['is_admin'] : (bool) $record->getAttribute('is_admin'),
         ];
+
+        if (! $atributos['is_admin']) {
+            $atributos[AdminPermissions::COLUMN] = null;
+        }
 
         // Senha em branco = manter a atual (o campo já vem desidratado).
         if (filled($data['password'] ?? null)) {

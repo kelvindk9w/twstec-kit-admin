@@ -4,13 +4,29 @@ declare(strict_types=1);
 
 namespace Twstec\Kit\Admin\Support;
 
+use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\ReplicateAction;
+use Filament\Actions\RestoreAction;
+use Filament\Actions\ViewAction;
 use Filament\Resources\Resource;
 use Filament\Support\Enums\Alignment;
 use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\ColumnGroup;
 use Filament\Tables\Columns\Layout\Component as ColumnLayoutComponent;
 use Filament\Tables\Table;
+use Illuminate\Auth\Access\Response;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use Twstec\Kit\Admin\Authorization\AdminAuthorization;
+use Twstec\Kit\Admin\Authorization\AdminPermissions;
+use Twstec\Kit\Admin\Authorization\Contracts\GuardedByPermission;
+use UnitEnum;
+
+use function Livewire\invade;
 
 /**
  * Base de TODO resource do super admin (/admin).
@@ -39,9 +55,19 @@ use Filament\Tables\Table;
  * saber disso: a conversão é feita aqui, em `modifyUngroupedRecordActionsUsing`,
  * antes de o hook `tableExtras()` declarar as ações.
  *
+ * PAPÉIS E PERMISSÕES: todo resource daqui respeita os papéis do painel
+ * (Authorization\AdminPermissions). A chave nas permissões sai do prefixo de
+ * tradução (`admin.users` → `users`; sobrescreva `$permissionKey` quando
+ * não servir). Ver/criar/editar/excluir passam pela policy do Filament
+ * (getAuthorizationResponse, abaixo: some o que o papel não dá — e, se o
+ * aplicativo tiver uma policy para o model, ela também precisa deixar); as
+ * ações próprias da tabela somem sozinhas para quem não tem
+ * `<chave>.<ação>`. A recusa de verdade é no servidor, para TODA chamada
+ * (AdminAuthorization, pelo gancho da trilha): esconder é só conforto.
+ *
  * Como criar uma tela nova está documentado em docs/admin-e-dashboards.md.
  */
-abstract class BaseResource extends Resource
+abstract class BaseResource extends Resource implements GuardedByPermission
 {
     /**
      * O id interno NUNCA vai para a URL: impede enumeração de registros.
@@ -53,6 +79,13 @@ abstract class BaseResource extends Resource
      * espera `.label` e `.plural` em lang/{pt_BR,en,es}/admin.php).
      */
     protected static string $translationKey = '';
+
+    /**
+     * Chave do resource nas permissões (`users` → `users.view`,
+     * `users.block`...). Nulo = o que vem depois de `admin.` no prefixo de
+     * tradução.
+     */
+    protected static ?string $permissionKey = null;
 
     /**
      * Chave de tradução do grupo de navegação (ex.: 'admin.nav.group_management').
@@ -115,6 +148,66 @@ abstract class BaseResource extends Resource
         return $table;
     }
 
+    public static function permissionKey(): string
+    {
+        return static::$permissionKey ?? Str::after(static::$translationKey, 'admin.');
+    }
+
+    /**
+     * Nome da Action => ação na permissão (null = só de tela). O padrão é o
+     * nome em snake_case — ação nova nasce exigindo permissão própria.
+     *
+     * @return array<string, string|null>
+     */
+    public static function actionAbilities(): array
+    {
+        return [];
+    }
+
+    /**
+     * A permissão completa de uma ação deste resource.
+     */
+    public static function permission(string $ability): string
+    {
+        return static::permissionKey().'.'.$ability;
+    }
+
+    /**
+     * A pessoa logada pode esta ação deste resource?
+     */
+    public static function allows(string $ability): bool
+    {
+        return AdminPermissions::allows(auth()->user(), static::permission($ability));
+    }
+
+    /**
+     * A policy do Filament passa pelos papéis ANTES da policy do aplicativo
+     * (quando houver): ver (`viewAny`/`view`) → `<chave>.view`, `create`,
+     * `update`, `delete`/`deleteAny` → `<chave>.delete`, e assim por diante.
+     */
+    public static function getAuthorizationResponse(string|UnitEnum $action, ?Model $record = null): Response
+    {
+        $name = match (true) {
+            $action instanceof BackedEnum => (string) $action->value,
+            $action instanceof UnitEnum => $action->name,
+            default => $action,
+        };
+
+        $ability = match ($name) {
+            'viewAny', 'view' => 'view',
+            'deleteAny' => 'delete',
+            'forceDeleteAny' => 'force_delete',
+            'restoreAny' => 'restore',
+            default => Str::snake($name),
+        };
+
+        if (! static::allows($ability)) {
+            return Response::deny(__('admin.authorization.denied', ['permission' => static::permission($ability)]));
+        }
+
+        return parent::getAuthorizationResponse($action, $record);
+    }
+
     public static function getModelLabel(): string
     {
         return __(static::$translationKey.'.label');
@@ -160,13 +253,19 @@ abstract class BaseResource extends Resource
         if ($isGrid) {
             $table = $table
                 ->contentGrid(static::cardGrid())
-                ->recordActionsAlignment(Alignment::Center->value)
-                // Precisa vir ANTES de tableExtras(): o Filament aplica este
-                // modificador no momento em que `recordActions()` é chamado.
-                ->modifyUngroupedRecordActionsUsing(
-                    fn (Action $action) => CardActions::style($action),
-                );
+                ->recordActionsAlignment(Alignment::Center->value);
         }
+
+        // Precisa vir ANTES de tableExtras(): o Filament aplica este
+        // modificador no momento em que `recordActions()` é chamado. No modo
+        // cards, o estilo do card; sempre, a permissão das ações próprias.
+        $table = $table->modifyUngroupedRecordActionsUsing(function (Action $action) use ($isGrid): Action {
+            if ($isGrid) {
+                CardActions::style($action);
+            }
+
+            return static::authorizeRecordAction($action);
+        });
 
         $table = static::tableExtras($table);
 
@@ -177,5 +276,29 @@ abstract class BaseResource extends Resource
         }
 
         return $table;
+    }
+
+    /**
+     * Esconde a ação própria da tabela de quem não tem `<chave>.<ação>`.
+     * As padrão do Filament (ver, editar, excluir...) já passam pela policy
+     * (getAuthorizationResponse); uma ação que já declarou `authorize()`
+     * fica com a dela.
+     */
+    protected static function authorizeRecordAction(Action $action): Action
+    {
+        $standard = $action instanceof ViewAction
+            || $action instanceof EditAction
+            || $action instanceof DeleteAction
+            || $action instanceof ForceDeleteAction
+            || $action instanceof RestoreAction
+            || $action instanceof ReplicateAction;
+
+        if ($standard || invade($action)->authorization !== null) {
+            return $action;
+        }
+
+        $ability = AdminAuthorization::abilityForAction(static::class, (string) $action->getName());
+
+        return $ability === null ? $action : $action->authorize(fn (): bool => static::allows($ability));
     }
 }

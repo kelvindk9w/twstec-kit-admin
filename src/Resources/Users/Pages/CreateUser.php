@@ -58,6 +58,15 @@ final class CreateUser extends CreateRecord
             throw new Halt;
         }
 
+        // Criar já com entrada no painel pede a permissão de atribuir papel
+        // — e a conta nasce SEM papel (nenhuma permissão) até alguém lhe dar
+        // um pela ação sensível "Alterar papel".
+        if ((bool) ($data['is_admin'] ?? false) && ! UserResource::allows('assign_role')) {
+            AdminAudit::denied(__('admin.authorization.denied', ['permission' => UserResource::permission('assign_role')]), null, 'created', __('admin.users.action_denied'), subjectType: 'user');
+
+            throw new Halt;
+        }
+
         $user = UserModel::make();
 
         // O cast `hashed` do model cuida do Argon2id da senha.

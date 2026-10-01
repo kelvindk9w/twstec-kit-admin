@@ -180,6 +180,16 @@ final class UploadResource extends BaseResource
             ]);
     }
 
+    /**
+     * "Abrir" só leva ao arquivo (URL assinada): pede o mesmo que ver a lista.
+     *
+     * @return array<string, string|null>
+     */
+    public static function actionAbilities(): array
+    {
+        return ['open' => 'view'];
+    }
+
     public static function getPages(): array
     {
         return [

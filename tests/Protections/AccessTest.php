@@ -54,7 +54,7 @@ it('model SEM o contrato do Filament, em ambiente LOCAL: quem recusa não-admin 
 
     $comum = PlainUser::fixture(['email' => 'comum-local@example.com']);
     $inativo = PlainUser::fixture(['email' => 'inativo-local@example.com', 'is_admin' => true, 'status' => UserStatus::Blocked]);
-    $admin = PlainUser::fixture(['email' => 'admin-local@example.com', 'is_admin' => true]);
+    $admin = PlainUser::fixture(['email' => 'admin-local@example.com', 'is_admin' => true, 'admin_role' => 'owner']);
 
     $this->actingAs($comum)->get('/admin/users')->assertForbidden();
 

@@ -17,7 +17,14 @@ use Illuminate\Support\Facades\RateLimiter;
 // =============================================================================
 
 it('a configuração do painel vem do pacote numa aplicação que não publicou nada', function (): void {
-    expect(config('admin'))->toBe(['protections' => true])
+    expect(config('admin.protections'))->toBeTrue()
+        ->and(array_keys(config('admin')))->toBe(['protections', 'authorization', 'approvals'])
+        ->and(config('admin.authorization.enabled'))->toBeTrue()
+        ->and(config('admin.authorization.super_role'))->toBe('owner')
+        ->and(array_keys(config('admin.authorization.roles')))->toBe(['owner', 'operations', 'support', 'auditor'])
+        ->and(config('admin.approvals.mode'))->toBe('four_eyes')
+        ->and(config('admin.approvals.actions'))->toBe([])
+        ->and(config('admin.approvals.sensitive_confirmation'))->toBeTrue()
         ->and(config('dashboards.periods'))->toBe([7, 30, 90])
         ->and(config('dashboards.latest_records'))->toBe(6)
         ->and(config('dashboards.goals.monthly_requests'))->toBe(1500);

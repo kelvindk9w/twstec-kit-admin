@@ -10,6 +10,7 @@ use Twstec\Kit\Admin\Dashboards\GrowthDashboard;
 use Twstec\Kit\Admin\Dashboards\OverviewDashboard;
 use Twstec\Kit\Admin\Resources\Accounts\AccountResource;
 use Twstec\Kit\Admin\Resources\ApiKeys\ApiKeyResource;
+use Twstec\Kit\Admin\Resources\ApprovalRequests\ApprovalRequestResource;
 use Twstec\Kit\Admin\Resources\AuditEvents\AuditEventResource;
 use Twstec\Kit\Admin\Resources\Projects\ProjectResource;
 use Twstec\Kit\Admin\Resources\RequestLogs\RequestLogResource;
@@ -53,6 +54,7 @@ it('sem o pacote de contas, as telas de contas, chaves e projetos nÃ£o existem â
     $this->bootWith([]);
 
     expect($this->panel()->getResources())->toEqualCanonicalizing([
+        ApprovalRequestResource::class,
         AuditEventResource::class,
         RequestLogResource::class,
         UserResource::class,

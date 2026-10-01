@@ -6,6 +6,7 @@ namespace Twstec\Kit\Admin\Resources\Users\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Twstec\Kit\Accounts\Account\Services\AccountService;
+use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Enums\UserStatus;
 use Twstec\Kit\Auth\Support\UserModel;
@@ -23,7 +24,13 @@ use Twstec\Kit\Foundation\Kit;
  *    (que exige shell no servidor) recuperaria o acesso;
  * 4. quem é DONO de conta com outros membros não é excluído — a propriedade
  *    é transferida antes (twstec/kit-accounts; sem o pacote, não há contas
- *    e a regra não se aplica).
+ *    e a regra não se aplica);
+ * 5. o último DONO do painel ativo (papel `super_role`) também não perde a
+ *    flag, não é bloqueado nem excluído — sem ele, ninguém mais atribui
+ *    papel nem mexe no que só o dono pode;
+ * 6. conceder ou tirar a flag de acesso pelo formulário pede a permissão de
+ *    atribuir papel (`users.assign_role`), e quem a concede não reativa
+ *    um papel que não poderia atribuir (ver AdminPermissions::canGrant).
  *
  * Cada método devolve NULL quando a ação é permitida ou a mensagem
  * traduzida do motivo quando não é.
@@ -63,7 +70,7 @@ final class UserAdminGuard
             return __('admin.users.cannot_delete_self');
         }
 
-        if (self::isLastActiveAdmin($record)) {
+        if (self::isLastActiveAdmin($record) || self::isLastActiveSuperAdmin($record)) {
             return __('admin.users.cannot_remove_last_admin');
         }
 
@@ -85,7 +92,7 @@ final class UserAdminGuard
             return __('admin.users.cannot_block_self');
         }
 
-        if (self::isLastActiveAdmin($record)) {
+        if (self::isLastActiveAdmin($record) || self::isLastActiveSuperAdmin($record)) {
             return __('admin.users.cannot_remove_last_admin');
         }
 
@@ -107,8 +114,14 @@ final class UserAdminGuard
         $viraInativo = array_key_exists('status', $data)
             && UserStatus::from((string) $data['status']) !== UserStatus::Active;
 
-        if (($viraNaoAdmin || $viraInativo) && self::isLastActiveAdmin($record)) {
+        if (($viraNaoAdmin || $viraInativo) && (self::isLastActiveAdmin($record) || self::isLastActiveSuperAdmin($record))) {
             return __('admin.users.cannot_remove_last_admin');
+        }
+
+        $mudaAcesso = array_key_exists('is_admin', $data) && (bool) $data['is_admin'] !== (bool) $record->getAttribute('is_admin');
+
+        if ($mudaAcesso && ($motivo = self::accessFlagDenial($record, (bool) $data['is_admin'], $actor))) {
+            return $motivo;
         }
 
         if ($viraInativo && $actor !== null && $actor->getKey() === $record->getKey()) {
@@ -116,6 +129,47 @@ final class UserAdminGuard
         }
 
         return null;
+    }
+
+    /**
+     * Pode conceder (ou tirar) a flag de acesso ao painel pelo formulário?
+     *
+     * Conceder só dá ENTRADA (sem papel, nenhuma permissão); tirar também tira
+     * o papel. As duas pedem `users.assign_role`. E conceder a quem guardou
+     * um papel que o ator não poderia atribuir reativaria esse papel — recusado.
+     */
+    public static function accessFlagDenial(Model&AuthUser $record, bool $grant, (Model&AuthUser)|null $actor): ?string
+    {
+        if (! AdminPermissions::allows($actor, 'users.assign_role')) {
+            return __('admin.authorization.denied', ['permission' => 'users.assign_role']);
+        }
+
+        if ($actor !== null && $actor->getKey() === $record->getKey()) {
+            return __('admin.roles.cannot_change_own');
+        }
+
+        if ($grant && ! AdminPermissions::canGrant($actor, AdminPermissions::roleOf($record))) {
+            return __('admin.roles.cannot_grant');
+        }
+
+        return null;
+    }
+
+    /**
+     * Este é o último DONO do painel ativo (papel `super_role`)?
+     */
+    public static function isLastActiveSuperAdmin(Model&AuthUser $record): bool
+    {
+        if (! AdminPermissions::isSuper($record)) {
+            return false;
+        }
+
+        return UserModel::query()
+            ->where('is_admin', true)
+            ->where('status', UserStatus::Active->value)
+            ->where(AdminPermissions::COLUMN, AdminPermissions::superRole())
+            ->whereKeyNot($record->getKey())
+            ->doesntExist();
     }
 
     /**

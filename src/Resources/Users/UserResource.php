@@ -31,10 +31,13 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Twstec\Kit\Admin\Approvals\Approvals;
+use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Admin\Resources\Users\Pages\CreateUser;
 use Twstec\Kit\Admin\Resources\Users\Pages\EditUser;
 use Twstec\Kit\Admin\Resources\Users\Pages\ListUsers;
 use Twstec\Kit\Admin\Resources\Users\Pages\ViewUser;
+use Twstec\Kit\Admin\Resources\Users\Support\DeleteUserApproval;
 use Twstec\Kit\Admin\Resources\Users\Support\MarkEmailVerifiedAction;
 use Twstec\Kit\Admin\Resources\Users\Support\UserAdminGuard;
 use Twstec\Kit\Admin\Support\AdminAudit;
@@ -59,7 +62,12 @@ use Twstec\Kit\Auth\Support\UserModel;
  *
  * Guardas de servidor (UserAdminGuard, não apenas botão escondido):
  * contas protegidas intocáveis, o admin não se exclui nem se bloqueia e o último
- * admin ativo não perde a flag/acesso.
+ * admin ativo (e o último dono) não perde a flag/acesso.
+ *
+ * PAPÉIS: cada ação pede `users.<ação>` (ver, criar, editar, excluir,
+ * bloquear, desbloquear, marcar e-mail verificado, atribuir papel). O papel
+ * muda só pela ação sensível "Alterar papel" (detalhe e edição). Excluir pode
+ * exigir aprovação em dois passos (DeleteUserApproval, atrás de config).
  *
  * `is_admin` e `status` NÃO são mass-assignable: as páginas de
  * criação/edição gravam por forceFill explícito.
@@ -152,7 +160,8 @@ final class UserResource extends BaseResource
                             ->selectablePlaceholder(false),
                         Toggle::make('is_admin')
                             ->label(__('admin.users.admin'))
-                            ->helperText(__('admin.users.admin_hint')),
+                            ->helperText(__('admin.users.admin_hint'))
+                            ->disabled(fn (): bool => ! self::allows('assign_role')),
                     ]),
             ]);
     }
@@ -187,6 +196,7 @@ final class UserResource extends BaseResource
                 ->trueColor('gray')
                 ->falseIcon(false)
                 ->alignCenter(),
+            self::roleColumn(),
             AdminColumns::dateTime('created_at', __('admin.users.created_at')),
         ];
     }
@@ -242,6 +252,33 @@ final class UserResource extends BaseResource
             ->label(__('admin.users.avatar'))
             ->circular()
             ->getStateUsing(fn (Model&AuthUser $record): string => Filament::getUserAvatarUrl($record));
+    }
+
+    /**
+     * O papel no painel (só de quem entra nele).
+     */
+    private static function roleColumn(): TextColumn
+    {
+        return TextColumn::make(AdminPermissions::COLUMN)
+            ->label(__('admin.roles.role'))
+            ->badge()
+            ->color('gray')
+            ->formatStateUsing(fn (?string $state): string => AdminPermissions::label($state))
+            ->placeholder('—');
+    }
+
+    /**
+     * Nome da Action => ação na permissão (o resto é o nome em snake_case:
+     * `block`, `unblock`, `mark_email_verified`).
+     *
+     * @return array<string, string|null>
+     */
+    public static function actionAbilities(): array
+    {
+        return [
+            'assignRole' => 'assign_role',
+            'confirmAssignRole' => 'assign_role',
+        ];
     }
 
     private static function statusColumn(): TextColumn
@@ -335,6 +372,14 @@ final class UserResource extends BaseResource
      */
     public static function deleteAction(): DeleteAction
     {
+        // Com ADMIN_APPROVALS_ACTIONS=users.delete, a exclusão vira pedido
+        // de aprovação (DeleteUserApproval); as guardas abaixo continuam
+        // valendo antes do pedido.
+        return Approvals::gate(self::directDeleteAction(), DeleteUserApproval::class);
+    }
+
+    private static function directDeleteAction(): DeleteAction
+    {
         return DeleteAction::make()
             ->label(__('admin.users.delete'))
             ->modalHeading(__('admin.users.delete_heading'))
@@ -370,6 +415,10 @@ final class UserResource extends BaseResource
                         UserStatus::Pending => __('admin.users.pending'),
                     }),
                 IconEntry::make('is_admin')->label(__('admin.users.admin'))->boolean(),
+                TextEntry::make(AdminPermissions::COLUMN)
+                    ->label(__('admin.roles.role'))
+                    ->formatStateUsing(fn (?string $state): string => AdminPermissions::label($state))
+                    ->placeholder(__('admin.roles.none')),
                 IconEntry::make('email_verified')
                     ->label(__('admin.users.email_verified'))
                     ->getStateUsing(fn (Model&AuthUser $record): bool => $record->hasVerifiedEmail())

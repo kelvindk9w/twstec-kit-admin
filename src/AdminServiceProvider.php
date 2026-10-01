@@ -8,7 +8,12 @@ use Filament\PanelRegistry;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
+use Twstec\Kit\Admin\Approvals\ApprovalRegistry;
+use Twstec\Kit\Admin\Approvals\Approvals;
+use Twstec\Kit\Admin\Approvals\Enums\ApprovalMode;
+use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Admin\Console\MakeAdminUser;
+use Twstec\Kit\Admin\Resources\Users\Support\DeleteUserApproval;
 use Twstec\Kit\Admin\Support\AdminAudit;
 use Twstec\Kit\Admin\Support\AdminPanelHardening;
 use Twstec\Kit\Admin\Support\FreshAvatarUploads;
@@ -30,6 +35,11 @@ use Twstec\Kit\Foundation\Localization\PackageTranslations;
  *   Filament (`/filament/exports/…`), que o Filament registra fora do painel,
  *   só com o grupo `web`: o arquivo gerado A PARTIR do /admin seria entregue
  *   por uma rota que a allowlist não cobria;
+ * - os PAPÉIS do painel (Authorization\AdminPermissions — a checagem de
+ *   servidor entra pelo gancho da trilha) e a APROVAÇÃO EM DOIS PASSOS
+ *   (Approvals\ApprovalService, com a exclusão de usuário registrada como
+ *   exemplo), com as migrations deles (`admin_role` em `users`, e
+ *   `admin_approval_requests`);
  * - o comando `user:make-admin`, as traduções (o aplicativo vence), as views
  *   (`kit-admin::`) e a configuração (a do aplicativo vence).
  */
@@ -41,6 +51,7 @@ final class AdminServiceProvider extends ServiceProvider
         $this->mergeConfigFrom($this->path('config/dashboards.php'), 'dashboards');
 
         $this->app->scoped(FreshAvatarUploads::class);
+        $this->app->singleton(ApprovalRegistry::class);
 
         // Depois que o Filament montou os painéis (os PanelProviders do
         // aplicativo terminaram de configurá-los) e antes de as rotas deles
@@ -59,8 +70,15 @@ final class AdminServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadViewsFrom($this->path('resources/views'), 'kit-admin');
+        $this->loadMigrationsFrom($this->path('database/migrations'));
 
         AdminAudit::register();
+
+        // O exemplo do kit: excluir usuário pode exigir aprovação
+        // (ADMIN_APPROVALS_ACTIONS=users.delete).
+        Approvals::register(DeleteUserApproval::class);
+
+        $this->warnAboutWeakenedAuthorization();
 
         if (AdminPanelHardening::enabled()) {
             // Depois de todos os providers: o grupo é criado (com `web`) pelo
@@ -80,6 +98,26 @@ final class AdminServiceProvider extends ServiceProvider
                 $this->path('config/admin.php') => config_path('admin.php'),
                 $this->path('config/dashboards.php') => config_path('dashboards.php'),
             ], 'admin-config');
+        }
+    }
+
+    /**
+     * Opt-outs dos papéis e da aprovação: só explícitos, com aviso a cada boot.
+     */
+    private function warnAboutWeakenedAuthorization(): void
+    {
+        if (! AdminPermissions::enabled()) {
+            Log::warning('ADMIN_AUTHORIZATION=false: os PAPÉIS do /admin estão DESLIGADOS — todo admin (is_admin + conta ativa) pode tudo no painel. Ver Twstec\Kit\Admin\Authorization\AdminPermissions.');
+        }
+
+        if ((array) config('admin.approvals.actions', []) === []) {
+            return;
+        }
+
+        if (ApprovalMode::configured() === ApprovalMode::SingleOperator) {
+            Log::warning('ADMIN_APPROVALS_MODE=single_operator: a aprovação em dois passos do /admin aceita que QUEM PEDIU aprove (com a ação sensível e a espera mínima). É o modo para equipes de uma pessoa; com duas ou mais, use four_eyes. Ver Twstec\Kit\Admin\Approvals\ApprovalService.');
+        } elseif (config('admin.approvals.sensitive_confirmation', true) === false) {
+            Log::warning('ADMIN_APPROVALS_SENSITIVE=false: aprovar um pedido no /admin NÃO pede a ação sensível (senha de transação + código). Ver Twstec\Kit\Admin\Approvals\ApprovalService.');
         }
     }
 
