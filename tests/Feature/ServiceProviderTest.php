@@ -12,6 +12,7 @@ use Twstec\Kit\Admin\Auth\EmailCodeAuthentication;
 use Twstec\Kit\Admin\Dashboards\GrowthDashboard;
 use Twstec\Kit\Admin\Dashboards\OverviewDashboard;
 use Twstec\Kit\Admin\Http\Middleware\EnsureAdminPanelAccess;
+use Twstec\Kit\Admin\Http\Middleware\EnsureAdminTwoFactorIsConfigured;
 use Twstec\Kit\Admin\Http\Middleware\OperateAdminPanelAsSystem;
 use Twstec\Kit\Admin\Pages\Auth\Login;
 use Twstec\Kit\Admin\Pages\Profile;
@@ -94,10 +95,11 @@ it('a barreira de origem é o PRIMEIRO middleware do painel e é persistente; o 
 
     expect($middleware[0])->toBe('panel:admin')
         ->and($middleware[1])->toBe(EnsureAdminIpAllowed::class)
-        // + o modo sistema das contas, depois do acesso de admin (F8a).
-        ->and($this->panel()->getAuthMiddleware())->toBe([Authenticate::class, EnsureAdminPanelAccess::class, OperateAdminPanelAsSystem::class])
+        // + o modo sistema das contas, depois do acesso de admin (F8a), e o
+        // segundo fator obrigatório entre os dois (issue #22).
+        ->and($this->panel()->getAuthMiddleware())->toBe([Authenticate::class, EnsureAdminPanelAccess::class, EnsureAdminTwoFactorIsConfigured::class, OperateAdminPanelAsSystem::class])
         ->and(app(PersistentMiddleware::class)->getPersistentMiddleware())
-        ->toContain(EnsureAdminIpAllowed::class, Authenticate::class, EnsureAdminPanelAccess::class, OperateAdminPanelAsSystem::class)
+        ->toContain(EnsureAdminIpAllowed::class, Authenticate::class, EnsureAdminPanelAccess::class, EnsureAdminTwoFactorIsConfigured::class, OperateAdminPanelAsSystem::class)
         ->and(AdminPanelHardening::holds($this->panel()))->toBeTrue();
 
     // A rota de verdade (o que o Laravel executa), não só a lista do painel.

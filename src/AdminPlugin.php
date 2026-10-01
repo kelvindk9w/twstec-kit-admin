@@ -22,7 +22,9 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Twstec\Kit\Admin\Auth\EmailCodeAuthentication;
 use Twstec\Kit\Admin\Dashboards\DashboardRegistry;
+use Twstec\Kit\Admin\Http\Controllers\RedirectToTwoFactorSetup;
 use Twstec\Kit\Admin\Http\Middleware\EnsureAdminPanelAccess;
+use Twstec\Kit\Admin\Http\Middleware\EnsureAdminTwoFactorIsConfigured;
 use Twstec\Kit\Admin\Http\Middleware\OperateAdminPanelAsSystem;
 use Twstec\Kit\Admin\Pages\Auth\Login;
 use Twstec\Kit\Admin\Pages\Profile;
@@ -37,6 +39,7 @@ use Twstec\Kit\Admin\Resources\Uploads\UploadResource;
 use Twstec\Kit\Admin\Resources\Users\UserResource;
 use Twstec\Kit\Admin\Support\AdminPanelHardening;
 use Twstec\Kit\Admin\Support\InitialsAvatarProvider;
+use Twstec\Kit\Auth\Support\TwoFactorRequirement;
 use Twstec\Kit\Foundation\Kit;
 use Twstec\Kit\Foundation\Localization\Middleware\SetLocale;
 use Twstec\Kit\Foundation\Security\Middleware\EnsureAdminIpAllowed;
@@ -52,7 +55,8 @@ use Twstec\Kit\Foundation\Security\Middleware\UseEvalBundleForAdmin;
  *   requisição, auditoria — os de módulo opcional só com o módulo
  *   instalado, ver RESOURCES), as páginas (perfil, configurações), o login com
  *   verificação em duas etapas por e-mail (provedor MFA próprio, o motor é o
- *   do twstec/kit-auth) e as variantes de dashboard (DashboardRegistry);
+ *   do twstec/kit-auth; obrigatória quando AUTH_TWO_FACTOR_REQUIRED alcança
+ *   os administradores) e as variantes de dashboard (DashboardRegistry);
  * - a navegação (ordem dos grupos), o menu do usuário, o avatar de iniciais
  *   local e a animação dos números dos dashboards;
  * - as PROTEÇÕES, sempre: a barreira de origem (allowlist de IP) como o
@@ -127,8 +131,19 @@ final class AdminPlugin implements Plugin
             // Filament com o MOTOR do kit: mesma preferência por conta do
             // painel do cliente, mesmo código por e-mail e mesmos limites (ver
             // EmailCodeAuthentication). Opcional — só pede o código de quem
-            // ligou; ligar/desligar fica no perfil (Pages\Profile).
-            ->multiFactorAuthentication([EmailCodeAuthentication::make()])
+            // ligou; ligar/desligar fica no perfil (Pages\Profile) —, a não
+            // ser que a regra do segundo fator OBRIGATÓRIO alcance os
+            // administradores (AUTH_TWO_FACTOR_REQUIRED=admins ou all): aí o
+            // MFA do painel é obrigatório, o middleware que o cobra é o do kit
+            // (respeita a carência) e a "configuração exigida" leva à tela de
+            // configuração do front. A mesma barreira está na pilha
+            // persistente (authMiddleware), conferida a cada requisição.
+            ->multiFactorAuthentication(
+                [EmailCodeAuthentication::make()],
+                RedirectToTwoFactorSetup::class,
+                isRequired: static fn (): bool => TwoFactorRequirement::reachesAdministrators(),
+            )
+            ->multiFactorAuthenticationRequiredMiddlewareName(EnsureAdminTwoFactorIsConfigured::class)
             ->resources(self::resources())
             ->pages([
                 Profile::class,
@@ -241,9 +256,11 @@ final class AdminPlugin implements Plugin
     /**
      * Autenticação do painel: o Authenticate do Filament (quem não está logado
      * vai para o login), o acesso só de admin com conta ativa, conferido pelo
-     * pacote, e — depois dos dois — o MODO SISTEMA das contas (o painel vê
-     * todas as contas; ver OperateAdminPanelAsSystem). Os três persistentes:
-     * valem também nas ações Livewire.
+     * pacote, o segundo fator obrigatório (quando a regra do twstec/kit-auth
+     * alcança os administradores; sem a regra, não faz nada) e — depois deles —
+     * o MODO SISTEMA das contas (o painel vê todas as contas; ver
+     * OperateAdminPanelAsSystem). Todos persistentes: valem também nas ações
+     * Livewire.
      *
      * @return list<class-string>
      */
@@ -252,6 +269,7 @@ final class AdminPlugin implements Plugin
         return [
             Authenticate::class,
             EnsureAdminPanelAccess::class,
+            EnsureAdminTwoFactorIsConfigured::class,
             OperateAdminPanelAsSystem::class,
         ];
     }

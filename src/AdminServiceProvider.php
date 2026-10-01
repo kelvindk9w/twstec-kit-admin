@@ -8,6 +8,7 @@ use Filament\PanelRegistry;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
+use Twstec\Kit\Admin\Access\PanelAdministrators;
 use Twstec\Kit\Admin\Approvals\ApprovalRegistry;
 use Twstec\Kit\Admin\Approvals\Approvals;
 use Twstec\Kit\Admin\Approvals\Enums\ApprovalMode;
@@ -17,6 +18,7 @@ use Twstec\Kit\Admin\Resources\Users\Support\DeleteUserApproval;
 use Twstec\Kit\Admin\Support\AdminAudit;
 use Twstec\Kit\Admin\Support\AdminPanelHardening;
 use Twstec\Kit\Admin\Support\FreshAvatarUploads;
+use Twstec\Kit\Auth\Contracts\IdentifiesAdministrators;
 use Twstec\Kit\Foundation\Localization\PackageTranslations;
 
 /**
@@ -51,6 +53,12 @@ final class AdminServiceProvider extends ServiceProvider
         $this->mergeConfigFrom($this->path('config/dashboards.php'), 'dashboards');
 
         $this->app->scoped(FreshAvatarUploads::class);
+
+        // "Administrador", para o segundo fator obrigatório do
+        // twstec/kit-auth (AUTH_TWO_FACTOR_REQUIRED=admins): quem entra no
+        // /admin ou tem algum papel do painel. Um registro do aplicativo
+        // (provider dele, depois deste) prevalece.
+        $this->app->bind(IdentifiesAdministrators::class, PanelAdministrators::class);
         $this->app->singleton(ApprovalRegistry::class);
 
         // Depois que o Filament montou os painéis (os PanelProviders do

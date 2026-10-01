@@ -21,7 +21,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Twstec\Kit\Admin\Support\AdminAudit;
 use Twstec\Kit\Admin\Support\AvatarUpload;
+use Twstec\Kit\Admin\Support\Exceptions\RecordedDenial;
 use Twstec\Kit\Auth\Contracts\AuthUser;
+use Twstec\Kit\Auth\Exceptions\TwoFactorRequiredException;
 use Twstec\Kit\Auth\Services\SensitiveActionService;
 use Twstec\Kit\Auth\Services\TwoFactorLogin;
 
@@ -120,7 +122,7 @@ final class Profile extends Page implements HasForms
                 ? __('panel.profile.two_factor_disable')
                 : __('panel.profile.two_factor_enable'))
             ->color(fn (): string => $this->twoFactorEnabled() ? 'gray' : 'primary')
-            ->disabled(fn (): bool => app(TwoFactorLogin::class)->blockedReason($this->user()) !== null)
+            ->disabled(fn (): bool => $this->twoFactorBlockedReason() !== null)
             ->modalHeading(__('panel.sensitive.heading'))
             ->modalDescription(fn (): string => $this->twoFactorEnabled()
                 ? __('panel.profile.two_factor_confirm_disable')
@@ -139,6 +141,16 @@ final class Profile extends Page implements HasForms
 
                 if ($reason !== null) {
                     $this->refuse($reason, $verb);
+                }
+
+                // Desligar com o segundo fator obrigatório: recusa no
+                // servidor, já registrada na trilha pelo TwoFactorLogin.
+                if ($this->twoFactorEnabled()) {
+                    try {
+                        app(TwoFactorLogin::class)->ensureCanDisable($this->user());
+                    } catch (TwoFactorRequiredException $exception) {
+                        $this->haltRecorded($exception);
+                    }
                 }
 
                 try {
@@ -179,6 +191,8 @@ final class Profile extends Page implements HasForms
                     $enabling
                         ? $twoFactor->enable($user, $issued['token'])
                         : $twoFactor->disable($user, $issued['token']);
+                } catch (TwoFactorRequiredException $exception) {
+                    $this->haltRecorded($exception);
                 } catch (ValidationException $exception) {
                     $this->refuse($this->firstMessage($exception), $this->twoFactorVerb($enabling));
                 }
@@ -200,9 +214,17 @@ final class Profile extends Page implements HasForms
         return app(TwoFactorLogin::class)->enabledFor($this->user());
     }
 
+    /**
+     * Por que o botão está desabilitado: o motivo de ligar ou — com o segundo
+     * fator ligado — o de desligar (inclui a regra de obrigatoriedade).
+     */
     public function twoFactorBlockedReason(): ?string
     {
-        return app(TwoFactorLogin::class)->blockedReason($this->user());
+        $twoFactor = app(TwoFactorLogin::class);
+
+        return $this->twoFactorEnabled()
+            ? $twoFactor->disableBlockedReason($this->user())
+            : $twoFactor->blockedReason($this->user());
     }
 
     public function save(): void
@@ -245,6 +267,21 @@ final class Profile extends Page implements HasForms
 
         // Mesmo efeito de $action->halt(), escrito como `throw` para o
         // retorno `never` ficar explícito.
+        throw new Halt;
+    }
+
+    /**
+     * Recusa cuja tentativa JÁ ESTÁ na trilha (TwoFactorRequiredException):
+     * só a mensagem e o modal aberto, sem uma segunda linha.
+     */
+    private function haltRecorded(TwoFactorRequiredException $exception): never
+    {
+        if ($exception->event === null) {
+            $this->refuse($this->firstMessage($exception), $this->twoFactorVerb(false));
+        }
+
+        AdminAudit::notifyRecorded(RecordedDenial::recorded($exception->event, $this->firstMessage($exception)));
+
         throw new Halt;
     }
 

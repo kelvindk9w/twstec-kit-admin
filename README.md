@@ -36,7 +36,7 @@ garante isso.
 | `AdminPlugin` | O plugin que o aplicativo registra no painel: resources, páginas, login, segundo fator, dashboards, navegação, menu do usuário, avatar de iniciais e as proteções |
 | `Resources\…` | Usuários (CRUD com guardas), Contas (só leitura: membros e papéis, projetos e chaves da conta), Chaves de API, Projetos, Uploads, Logs de requisição e Auditoria |
 | `Pages\…` | Perfil do admin (foto, nome, segundo fator), Configurações editáveis e o Login (`Pages\Auth\Login`) |
-| `Auth\EmailCodeAuthentication` | Provedor de MFA do Filament com o motor do `twstec/kit-auth` (código por e-mail, mesmos limites do painel do cliente) |
+| `Auth\EmailCodeAuthentication` | Provedor de MFA do Filament com o motor do `twstec/kit-auth` (código por e-mail, mesmos limites do painel do cliente); obrigatório quando `AUTH_TWO_FACTOR_REQUIRED` alcança os administradores |
 | `Dashboards\…`, `Widgets\…` | As variantes "Visão geral" e "Crescimento & API", o `DashboardRegistry` (lê `config/dashboards.php`) e a base de widgets (`Metric`, `Period`, `BaseStatsWidget`…) |
 | `Support\AdminAudit` | A trilha de auditoria das ações: toda chamada Livewire de tela do painel roda com um escopo aberto; o `AuditTrail` do foundation grava cada escrita de model |
 | `Support\AdminPanelHardening` | As garantias de segurança do painel, aplicadas pelo pacote qualquer que seja a ordem do `PanelProvider` |
@@ -216,6 +216,13 @@ painéis):
   recusada fica registrada.
 - **Trilha de auditoria** das ações do painel (`AdminAudit`, ligada no boot do
   provider) e o **segundo fator** por e-mail no login.
+- **Segundo fator obrigatório** — com `AUTH_TWO_FACTOR_REQUIRED=admins` ou
+  `all` (regra do `twstec/kit-auth`), o MFA do Filament fica obrigatório e o
+  `EnsureAdminTwoFactorIsConfigured` (na pilha persistente, entre o acesso de
+  admin e o modo sistema) leva o administrador sem segundo fator à tela de
+  configuração do front (`two-factor.setup`) em toda tela e ação Livewire.
+  "Administrador" é quem entra no painel ou tem qualquer papel dele
+  (`Access\PanelAdministrators`).
 - **Papéis** — a permissão de cada tela e de cada Action conferida no
   servidor, pelo mesmo gancho da trilha (`AdminAuthorization`).
 - **Modo sistema das contas** (`twstec/kit-accounts`) — o painel vê projetos e
