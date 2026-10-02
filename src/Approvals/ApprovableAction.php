@@ -15,7 +15,7 @@ use Twstec\Kit\Admin\Support\AdminAudit;
  * O aplicativo declara a ação uma vez — o que ela faz, quais guardas valem e
  * o que o aprovador precisa ver — e registra no provider dele:
  *
- *   Approvals::register(RefundPayment::class);
+ *   Approvals::register(CancelOrder::class);
  *
  * Ela passa a exigir aprovação quando a chave está em
  * `admin.approvals.actions` (ADMIN_APPROVALS_ACTIONS). Na tela, a Action do
@@ -31,7 +31,7 @@ use Twstec\Kit\Admin\Support\AdminAudit;
 abstract class ApprovableAction
 {
     /**
-     * Chave estável (`users.delete`, `payments.refund`). É também a permissão
+     * Chave estável (`users.delete`, `orders.cancel`). É também a permissão
      * que quem pede e quem aprova precisam ter (permission()).
      */
     abstract public function key(): string;

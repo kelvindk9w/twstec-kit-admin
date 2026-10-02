@@ -23,12 +23,12 @@ use function Livewire\invade;
  *   1. a ação: uma classe que estende ApprovableAction (chave, model alvo,
  *      guardas, antes/depois e o execute());
  *   2. o registro, no provider do aplicativo:
- *        Approvals::register(RefundPayment::class);
+ *        Approvals::register(CancelOrder::class);
  *   3. a Action do Filament passa por gate() — o resto da Action continua
  *      igual (rótulo, confirmação, `before()` com as guardas):
- *        Approvals::gate(Action::make('refund')->...->action(fn ... => ...), RefundPayment::class)
+ *        Approvals::gate(Action::make('cancel')->...->action(fn ... => ...), CancelOrder::class)
  *
- * E liga na config: ADMIN_APPROVALS_ACTIONS=payments.refund (ou, se a ação
+ * E liga na config: ADMIN_APPROVALS_ACTIONS=orders.cancel (ou, se a ação
  * exige aprovação sempre, ApprovableAction::alwaysRequiresApproval()).
  * Desligada, a Action executa como sempre; ligada, pede o motivo (os campos
  * que a Action já tinha continuam) e cria o pedido, que outra pessoa aprova

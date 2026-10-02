@@ -312,7 +312,12 @@ sido declarado vira recusa limpa na hora (notificação + `denied` na trilha,
 nada apagado), não o erro do banco. Com a aprovação em dois passos
 (`users.delete`), o mesmo vale em cada passo: impedimento recusa o pedido; a
 recusa que só aparece na execução deixa o pedido `failed` com a mensagem
-traduzida (`Approvals\ExecutionRefused`), nada apagado.
+traduzida (`Approvals\ExecutionRefused`), nada apagado. Nos dois caminhos, a
+exclusão é a do caminho único do `twstec/kit-accounts`
+(`Deletion\AccountDeletion::deleteUser`), que grava a recusa na trilha uma vez
+só; o painel só avisa o operador. (`UserAdminGuard::deleteRefusal(Closure)`
+deu lugar a `UserAdminGuard::delete($pessoa)`, que lança a recusa já gravada —
+`Support\Exceptions\RecordedDenial`.)
 
 ## Nomes antigos → nomes novos
 

@@ -419,7 +419,9 @@ final class ApprovalService
 
             $this->transition($request, ApprovalStatus::Failed, 'failed', ['failure_reason' => $motivo]);
 
-            $this->trail->denied(AuditTrail::subjectType($subject).'.'.$action->verb(), $subject, $motivo);
+            if (! $refused->recorded) {
+                $this->trail->denied(AuditTrail::subjectType($subject).'.'.$action->verb(), $subject, $motivo);
+            }
 
             return;
         } catch (Throwable $exception) {

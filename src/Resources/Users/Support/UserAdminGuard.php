@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Twstec\Kit\Admin\Resources\Users\Support;
 
-use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Twstec\Kit\Accounts\Account\Exceptions\OwnerOfSharedAccountException;
 use Twstec\Kit\Accounts\Account\Services\AccountService;
-use Twstec\Kit\Accounts\Deletion\DeletionImpediments;
+use Twstec\Kit\Accounts\Deletion\AccountDeletion;
 use Twstec\Kit\Accounts\Deletion\Exceptions\DeletionImpededException;
 use Twstec\Kit\Admin\Authorization\AdminPermissions;
+use Twstec\Kit\Admin\Support\Exceptions\RecordedDenial;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Enums\UserStatus;
 use Twstec\Kit\Auth\Support\UserModel;
@@ -85,24 +85,37 @@ final class UserAdminGuard
     }
 
     /**
-     * Roda a exclusão (já autorizada pela pré-checagem) e devolve `true` —
-     * ou o MOTIVO traduzido quando ela é recusada na hora: impedimento
-     * declarado que surgiu depois da tela, dona de conta com membros, ou um
-     * registro do aplicativo que aponta para a pessoa (chave estrangeira
-     * RESTRICT) — com a exclusão desfeita, nada apagado.
+     * Exclui a pessoa (já autorizada pela pré-checagem) e devolve `true` — ou
+     * LANÇA a RECUSA, já gravada na trilha, quando ela é recusada na hora:
+     * impedimento declarado que surgiu depois da tela, dona de conta com
+     * membros, ou um registro do aplicativo que aponta para a pessoa (chave
+     * estrangeira RESTRICT) — com a exclusão desfeita, nada apagado. A tela
+     * só avisa (AdminAudit::notifyRecorded).
      *
-     * @param  Closure(): bool  $delete
+     * Com o twstec/kit-accounts, a exclusão é a do CAMINHO ÚNICO
+     * (Deletion\AccountDeletion::deleteUser), que grava a recusa. `false` =
+     * um ouvinte do aplicativo cancelou sem exceção.
+     *
+     * @throws RecordedDenial
      */
-    public static function deleteRefusal(Closure $delete): string|bool
+    public static function delete(Model&AuthUser $record): bool
     {
         if (! Kit::has('accounts')) {
-            return $delete();
+            return (bool) $record->delete();
         }
 
+        $deletion = app(AccountDeletion::class);
+
         try {
-            return DeletionImpediments::guardIntegrity($delete);
+            return $deletion->deleteUser($record);
         } catch (DeletionImpededException|OwnerOfSharedAccountException $exception) {
-            return $exception->getMessage();
+            $event = $deletion->recordedRefusal($exception);
+
+            if ($event === null) {
+                throw $exception;
+            }
+
+            throw RecordedDenial::recorded($event, $exception->getMessage());
         }
     }
 

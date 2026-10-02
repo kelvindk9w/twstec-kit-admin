@@ -18,5 +18,15 @@ use RuntimeException;
  * mensagem em `failure_reason` (sem o nome da classe, sem texto do banco), a
  * recusa vai para a trilha no alvo (`<tipo>.<verbo>`, `denied`, com o motivo)
  * e nada é reportado como erro.
+ *
+ * `recorded: true` = quem recusou JÁ gravou a recusa na trilha (o caminho
+ * único de exclusão do twstec/kit-accounts, que a guarda mesmo com a
+ * transação desfeita): o ApprovalService não grava de novo — uma linha só.
  */
-final class ExecutionRefused extends RuntimeException {}
+final class ExecutionRefused extends RuntimeException
+{
+    public function __construct(string $message, public readonly bool $recorded = false)
+    {
+        parent::__construct($message);
+    }
+}

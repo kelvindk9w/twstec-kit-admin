@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Twstec\Kit\Admin\Approvals\ApprovableAction;
 use Twstec\Kit\Admin\Approvals\ExecutionRefused;
 use Twstec\Kit\Admin\Authorization\AdminPermissions;
+use Twstec\Kit\Admin\Support\Exceptions\RecordedDenial;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Support\UserModel;
 
@@ -27,7 +28,8 @@ use Twstec\Kit\Auth\Support\UserModel;
  * aprovação (com quem aprova: ninguém aprova a exclusão da própria conta) e,
  * na EXECUÇÃO, a recusa que só aparece na hora (impedimento novo, registro
  * do aplicativo com chave estrangeira RESTRICT) vira pedido `failed` com a
- * mensagem traduzida, nada apagado (UserAdminGuard::deleteRefusal).
+ * mensagem traduzida, nada apagado (UserAdminGuard::delete — o caminho
+ * único de exclusão do twstec/kit-accounts, que grava a recusa na trilha).
  *
  * O retrato do estado olha o que muda o sentido da exclusão: e-mail,
  * situação, flag de acesso e papel. Se algum mudou depois do pedido, ele
@@ -90,10 +92,15 @@ final class DeleteUserApproval extends ApprovableAction
      */
     public function execute(Model $subject, array $data, Authenticatable $actor): void
     {
-        $motivo = UserAdminGuard::deleteRefusal(fn (): bool => (bool) $subject->delete());
+        if (! $subject instanceof AuthUser) {
+            throw new ExecutionRefused(__('admin.approvals.subject_missing'));
+        }
 
-        if (is_string($motivo)) {
-            throw new ExecutionRefused($motivo);
+        try {
+            UserAdminGuard::delete($subject);
+        } catch (RecordedDenial $recusa) {
+            // O caminho único de exclusão já gravou a recusa na trilha.
+            throw new ExecutionRefused($recusa->getMessage(), recorded: true);
         }
     }
 

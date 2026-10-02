@@ -44,6 +44,7 @@ use Twstec\Kit\Admin\Support\AdminAudit;
 use Twstec\Kit\Admin\Support\AdminColumns;
 use Twstec\Kit\Admin\Support\AvatarUpload;
 use Twstec\Kit\Admin\Support\BaseResource;
+use Twstec\Kit\Admin\Support\Exceptions\RecordedDenial;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Enums\UserStatus;
 use Twstec\Kit\Auth\PasswordPolicy;
@@ -398,15 +399,17 @@ final class UserResource extends BaseResource
             // pessoa sem ter sido declarado): mensagem limpa, `denied` na
             // trilha, nada apagado — nunca o erro bruto do banco.
             ->using(function (Model&AuthUser $record, DeleteAction $action): bool {
-                $motivo = UserAdminGuard::deleteRefusal(fn (): bool => (bool) $record->delete());
-
-                if (is_string($motivo)) {
-                    AdminAudit::denied($motivo, $record, 'deleted', __('admin.users.action_denied'));
+                try {
+                    return UserAdminGuard::delete($record);
+                } catch (RecordedDenial $recusa) {
+                    // A recusa JÁ está na trilha (o caminho único de exclusão
+                    // grava): aqui só o aviso ao operador.
+                    AdminAudit::notifyRecorded($recusa, __('admin.users.action_denied'));
 
                     $action->cancel();
-                }
 
-                return $motivo === true;
+                    return false;
+                }
             });
     }
 

@@ -160,12 +160,12 @@ it('EXCLUIR USUÁRIO com impedimento declarado: o botão some e a pré-checagem 
     $alvo = User::fixture(['email_verified_at' => now()]);
 
     app(DeletionImpediments::class)->register(fn ($pedido): array => $pedido->person?->getKey() === $alvo->getKey()
-        ? [new DeletionImpediment('ledger_entries', 'Há lançamentos que a lei manda guardar.')]
+        ? [new DeletionImpediment('retained_records', 'Há registros que a lei manda guardar.')]
         : []);
 
     Livewire::test(ListUsers::class)->assertActionHidden(TestAction::make('delete')->table($alvo));
 
-    expect(UserAdminGuard::deleteDenial($alvo, $this->operador))->toBe('Há lançamentos que a lei manda guardar.')
+    expect(UserAdminGuard::deleteDenial($alvo, $this->operador))->toBe('Há registros que a lei manda guardar.')
         ->and(User::query()->whereKey($alvo->id)->exists())->toBeTrue();
 });
 

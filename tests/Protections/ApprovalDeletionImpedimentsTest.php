@@ -164,14 +164,14 @@ it('EXECUÇÃO: impedimento DECLARADO que só aparece na hora (corrida com a apr
         $situacao = ApprovalRequest::query()->whereKey($pedido->id)->first()?->status?->value;
         $consultas[] = $situacao;
 
-        return $situacao === ApprovalStatus::Approved->value ? [new DeletionImpediment('ledger_entries', 'Lançamentos guardados por lei.')] : [];
+        return $situacao === ApprovalStatus::Approved->value ? [new DeletionImpediment('retained_records', 'Registros guardados por lei.')] : [];
     });
 
     $resultado = app(ApprovalService::class)->approve($pedido, $this->aprova, $token);
 
     expect($resultado->status)->toBe(ApprovalStatus::Failed)
-        ->and($resultado->failure_reason)->toBe('Lançamentos guardados por lei.')
+        ->and($resultado->failure_reason)->toBe('Registros guardados por lei.')
         ->and(User::query()->whereKey($this->alvo->id)->exists())->toBeTrue()
         ->and($consultas)->toContain(ApprovalStatus::Pending->value, ApprovalStatus::Approved->value)
-        ->and(AuditEvent::query()->where('action', 'user.deleted')->where('outcome', AuditOutcome::Denied)->sole()->reason)->toBe('Lançamentos guardados por lei.');
+        ->and(AuditEvent::query()->where('action', 'user.deleted')->where('outcome', AuditOutcome::Denied)->sole()->reason)->toBe('Registros guardados por lei.');
 });
