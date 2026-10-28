@@ -325,23 +325,166 @@ it('ninguém muda o PRÓPRIO papel — nem o dono', function (): void {
 it('o ÚLTIMO dono ativo não é bloqueado, excluído nem perde a entrada — mesmo havendo outros admins', function (): void {
     // Outro admin ativo existe (o "último admin" não se aplica): a regra que
     // segura é a do último DONO.
+    // (Pela tela, a operação nem vê o "Bloquear" do dono — está acima dela;
+    // a regra do último dono vem antes na guarda e segura também o caminho
+    // em que o bloqueio chegasse ao servidor.)
     $operador = adminWithRole('operations');
     $this->actingAs($operador);
 
-    Livewire::test(ListUsers::class)->callTableAction('block', $this->dono);
-
-    expect($this->dono->fresh()->status)->toBe(UserStatus::Active)
-        ->and(deniedRow('user.blocked', $this->dono->uuid)?->reason)->toBe(__('admin.users.cannot_remove_last_admin'))
+    expect(UserAdminGuard::blockDenial($this->dono, $operador))->toBe(__('admin.users.cannot_remove_last_admin'))
         ->and(UserAdminGuard::deleteDenial($this->dono, $operador))->toBe(__('admin.users.cannot_remove_last_admin'))
         ->and(UserAdminGuard::updateDenial($this->dono, ['is_admin' => false], $operador))->toBe(__('admin.users.cannot_remove_last_admin'))
         ->and(UserAdminGuard::updateDenial($this->dono, ['status' => UserStatus::Blocked->value], $operador))->toBe(__('admin.users.cannot_remove_last_admin'));
 
-    // Com um segundo dono ativo, o primeiro deixa de ser o último.
-    $this->admin(['email' => 'segundo-dono@example.com']);
+    // Com um segundo dono ativo, o primeiro deixa de ser o último — e quem
+    // bloqueia é esse outro dono: a operação não mexe em quem está acima
+    // dela (ver "SEM ESCALADA PELO ALVO" abaixo).
+    $segundoDono = $this->admin(['email' => 'segundo-dono@example.com']);
+    actAs($this, $segundoDono);
 
     Livewire::test(ListUsers::class)->callTableAction('block', $this->dono);
 
     expect($this->dono->fresh()->status)->toBe(UserStatus::Blocked);
+});
+
+// -----------------------------------------------------------------------------
+// SEM ESCALADA PELO ALVO: quem não poderia conceder o papel do alvo não mexe
+// nele — nem editar (e-mail + senha = tomar a conta), nem bloquear,
+// desbloquear, excluir ou marcar o e-mail.
+// -----------------------------------------------------------------------------
+
+it('SEM ESCALADA PELO ALVO: a operação não edita, bloqueia, desbloqueia nem exclui o dono — some da tela e o servidor recusa', function (): void {
+    $operador = adminWithRole('operations');
+    // Dois donos: a regra do último dono não entra na conta.
+    $donaB = $this->admin(['email' => 'dona-b@example.com']);
+    $donaBloqueada = $this->admin(['email' => 'dona-bloqueada@example.com', 'status' => UserStatus::Blocked]);
+
+    actAs($this, $operador);
+
+    Livewire::test(ListUsers::class)
+        ->assertTableActionHidden('edit', $donaB)
+        ->assertTableActionHidden('block', $donaB)
+        ->assertTableActionHidden('delete', $donaB)
+        ->assertTableActionHidden('unblock', $donaBloqueada);
+
+    // A edição nem abre pela URL.
+    $this->get("/admin/users/{$donaB->uuid}/edit")->assertForbidden();
+
+    $motivo = __('admin.users.cannot_manage_higher');
+
+    expect(UserAdminGuard::editDenial($donaB, $operador))->toBe($motivo)
+        ->and(UserAdminGuard::blockDenial($donaB, $operador))->toBe($motivo)
+        ->and(UserAdminGuard::unblockDenial($donaBloqueada, $operador))->toBe($motivo)
+        ->and(UserAdminGuard::deleteDenial($donaB, $operador))->toBe($motivo)
+        ->and(UserAdminGuard::updateDenial($donaB, ['email' => 'atacante@example.com'], $operador))->toBe($motivo)
+        // Sem ator conhecido, falha fechada.
+        ->and(UserAdminGuard::editDenial($donaB))->toBe($motivo)
+        ->and(UserResource::canEdit($donaB))->toBeFalse()
+        ->and(UserResource::canDelete($donaB))->toBeFalse();
+});
+
+it('SEM ESCALADA PELO ALVO: o "Salvar" forjado (tela aberta antes de o alvo virar dono) é 403 — e-mail e senha intactos', function (): void {
+    $operador = adminWithRole('operations');
+    $alvo = User::fixture(['email' => 'futura-dona@example.com']);
+    $hashAntes = $alvo->password;
+
+    $html = $this->actingAs($operador)->get("/admin/users/{$alvo->uuid}/edit")->assertOk()->getContent();
+    $snapshot = $this->snapshotFrom((string) $html, EditUser::class);
+
+    // Virou dona com a tela do operador aberta.
+    $alvo->forceFill(['admin_role' => 'owner', 'is_admin' => true])->save();
+
+    $this->livewireCall($snapshot, 'save', [
+        'data.email' => 'atacante@example.com',
+        'data.password' => 'Nova!Senha#2026x',
+        'data.password_confirmation' => 'Nova!Senha#2026x',
+    ])->assertForbidden();
+
+    expect($alvo->fresh()->email)->toBe('futura-dona@example.com')
+        ->and($alvo->fresh()->password)->toBe($hashAntes);
+});
+
+it('SEM ESCALADA PELO ALVO: o bloqueio forjado (modal aberto antes de o alvo virar dono) não bloqueia', function (): void {
+    $operador = adminWithRole('operations');
+    $alvo = User::fixture(['email' => 'futuro-dono@example.com']);
+
+    $html = $this->actingAs($operador)->get('/admin/users')->assertOk()->getContent();
+    $snapshot = $this->snapshotFrom((string) $html, ListUsers::class);
+    $montado = $this->livewireCall($snapshot, 'mountAction', [], ['block', [], ['table' => true, 'recordKey' => (string) $alvo->getKey()]])->assertOk();
+
+    $alvo->forceFill(['admin_role' => 'owner', 'is_admin' => true])->save();
+
+    $this->livewireCall((string) $montado->json('components.0.snapshot'), 'callMountedAction');
+
+    expect($alvo->fresh()->status)->toBe(UserStatus::Active);
+});
+
+it('SEM ESCALADA PELO ALVO: o dono mexe em todos; papel igual pode; o suporte não marca o e-mail da operação', function (): void {
+    $operador = adminWithRole('operations');
+    $colega = adminWithRole('operations', ['email' => 'colega@example.com', 'email_verified_at' => null]);
+    $suporte = adminWithRole('support', ['email' => 'suporte-b@example.com']);
+    $donaB = $this->admin(['email' => 'dona-b@example.com']);
+
+    // O dono: tudo, inclusive outro dono.
+    expect(UserAdminGuard::editDenial($donaB, $this->dono))->toBeNull()
+        ->and(UserAdminGuard::blockDenial($donaB, $this->dono))->toBeNull()
+        ->and(UserAdminGuard::deleteDenial($colega, $this->dono))->toBeNull()
+        // Papel igual (canGrant): a operação mexe na operação e no suporte.
+        ->and(UserAdminGuard::blockDenial($colega, $operador))->toBeNull()
+        ->and(UserAdminGuard::editDenial($suporte, $operador))->toBeNull()
+        // O suporte não poderia conceder `operations`: não marca o e-mail dela.
+        ->and(UserAdminGuard::verifyEmailDenial($colega, $suporte))->toBe(__('admin.users.cannot_manage_higher'));
+
+    actAs($this, $suporte);
+    Livewire::test(ListUsers::class)->assertTableActionHidden('markEmailVerified', $colega);
+
+    actAs($this, $this->dono);
+    Livewire::test(ListUsers::class)
+        ->assertTableActionVisible('edit', $donaB)
+        ->callTableAction('block', $donaB);
+
+    expect($donaB->fresh()->status)->toBe(UserStatus::Blocked);
+
+    actAs($this, $operador);
+    Livewire::test(ListUsers::class)->callTableAction('block', $colega);
+
+    expect($colega->fresh()->status)->toBe(UserStatus::Blocked);
+});
+
+it('trocar o e-mail pela edição volta a pedir confirmação e renova o remember_token; a senha também renova', function (): void {
+    $alvo = User::fixture(['email' => 'antigo@example.com']);
+    $alvo->forceFill(['remember_token' => 'token-antigo'])->save();
+    $this->actingAs($this->dono);
+
+    // Só o nome: nada muda no acesso.
+    Livewire::test(EditUser::class, ['record' => $alvo->uuid])
+        ->fillForm(['name' => 'Outro Nome'])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($alvo->fresh()->email_verified_at)->not->toBeNull()
+        ->and($alvo->fresh()->remember_token)->toBe('token-antigo');
+
+    Livewire::test(EditUser::class, ['record' => $alvo->uuid])
+        ->fillForm(['email' => 'novo@example.com'])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    $alvo->refresh();
+
+    expect($alvo->email)->toBe('novo@example.com')
+        ->and($alvo->email_verified_at)->toBeNull()
+        ->and($alvo->remember_token)->not->toBe('token-antigo');
+
+    $alvo->forceFill(['remember_token' => 'token-antigo', 'email_verified_at' => now()])->save();
+
+    Livewire::test(EditUser::class, ['record' => $alvo->uuid])
+        ->fillForm(['password' => 'Nova!Senha#2026x', 'password_confirmation' => 'Nova!Senha#2026x'])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($alvo->fresh()->remember_token)->not->toBe('token-antigo')
+        ->and($alvo->fresh()->email_verified_at)->not->toBeNull();
 });
 
 it('a flag de acesso no formulário: pede `users.assign_role`, e tirá-la tira também o papel', function (): void {

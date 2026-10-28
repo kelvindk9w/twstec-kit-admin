@@ -72,6 +72,7 @@ return [
         'cannot_delete_self' => 'Você não pode excluir a própria conta.',
         'cannot_block_self' => 'Você não pode bloquear a própria conta.',
         'cannot_remove_last_admin' => 'Este é o último administrador ativo: o painel ficaria sem acesso.',
+        'cannot_manage_higher' => 'Esta pessoa tem um papel no painel que você não poderia conceder: só quem tem as mesmas permissões edita, bloqueia, desbloqueia, exclui ou mexe no e-mail dela.',
         'action_denied' => 'Ação não permitida',
         'avatar' => 'Foto',
         'avatar_hint' => 'JPG, PNG ou WEBP, até :max KB. Deixe em branco para usar as iniciais do nome.',

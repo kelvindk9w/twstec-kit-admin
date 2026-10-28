@@ -50,6 +50,9 @@ return [
     // `mark_email_verified`, `assign_role`, `revoke`, `approve`...). O
     // padrão aceita `*` (`users.*`, `*.view`, `*`).
     //
+    // Fora do painel: `horizon.access` abre o dashboard de filas (/horizon,
+    // gate `viewHorizon` do aplicativo — Access\HorizonAccess).
+    //
     // A checagem é NO SERVIDOR (toda chamada Livewire de tela do painel,
     // além das policies dos resources): esconder o botão é só conforto.
     //
@@ -88,6 +91,10 @@ return [
                 'approvals.approve',
                 'approvals.reject',
                 'approvals.execute',
+                // Dashboard de filas (/horizon): payload dos jobs e refazer/
+                // apagar job — Access\HorizonAccess. Fora de `*.view` de
+                // propósito.
+                'horizon.access',
             ],
             'support' => [
                 'users.view',

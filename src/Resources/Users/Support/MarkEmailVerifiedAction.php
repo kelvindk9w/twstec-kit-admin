@@ -24,7 +24,8 @@ use Twstec\Kit\Auth\Contracts\AuthUser;
  * uma definição só, para as regras não divergirem entre as telas:
  * - aparece só para conta AINDA não verificada (User::hasVerifiedEmail, a
  *   mesma pergunta que o middleware do painel faz);
- * - some e é recusada no servidor para conta protegida (UserAdminGuard);
+ * - some e é recusada no servidor para conta protegida e para quem tem
+ *   papel no painel acima do de quem age (UserAdminGuard);
  * - pede confirmação;
  * - dispara o evento `Verified` do framework, como o link do e-mail faz;
  * - fica registrada na trilha de auditoria (`audit_events`) como
@@ -61,7 +62,7 @@ final class MarkEmailVerifiedAction
             ->modalSubmitActionLabel(__('admin.users.mark_email_verified_confirm'))
             ->action(function (Model&AuthUser $record): void {
                 // Guarda de SERVIDOR: esconder o botão não é proteção.
-                if ($motivo = UserAdminGuard::verifyEmailDenial($record)) {
+                if ($motivo = UserAdminGuard::verifyEmailDenial($record, auth()->user())) {
                     AdminAudit::denied($motivo, $record, self::VERB, __('admin.users.action_denied'));
 
                     return;
@@ -89,6 +90,6 @@ final class MarkEmailVerifiedAction
      */
     public static function isAvailableFor(Model&AuthUser $record): bool
     {
-        return ! $record->hasVerifiedEmail() && UserAdminGuard::verifyEmailDenial($record) === null;
+        return ! $record->hasVerifiedEmail() && UserAdminGuard::verifyEmailDenial($record, auth()->user()) === null;
     }
 }

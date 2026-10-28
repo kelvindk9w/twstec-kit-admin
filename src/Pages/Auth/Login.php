@@ -10,6 +10,7 @@ use Filament\Auth\Pages\Login as BaseLogin;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Livewire\Attributes\Locked;
+use Twstec\Kit\Auth\Actions\AttemptLogin;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Services\TwoFactorLogin;
 use Twstec\Kit\Auth\Support\LoginPrefill;
@@ -33,6 +34,16 @@ use Twstec\Kit\Auth\Support\LoginPrefill;
  *     vencida, o código morre e a página de login recomeça, com o aviso;
  *   - VOLTAR: desiste do código, invalida o código enviado e recomeça a
  *     página de login.
+ *
+ * BLOQUEIO POR TENTATIVAS: o limite do próprio Filament conta pelo IP exato
+ * — com IPv6, trocar de endereço dentro do próprio /64 (ou usar muitos IPs)
+ * dava tentativas sem fim contra a senha de um admin. Por cima dele, este
+ * login aplica a regra do login do aplicativo (Actions\AttemptLogin do
+ * twstec/kit-auth), com os MESMOS contadores: e-mail + cliente
+ * (ClientBucket, IPv6 pelo prefixo) e por CONTA, de qualquer origem — quem
+ * testa senhas não ganha orçamento novo alternando entre /login e
+ * /admin/login. Mesma mensagem genérica de bloqueio; senha certa zera os
+ * dois.
  */
 class Login extends BaseLogin
 {
@@ -68,7 +79,23 @@ class Login extends BaseLogin
             return null;
         }
 
+        $email = $this->attemptedEmail();
+        $passwordStep = blank($this->userUndertakingMultiFactorAuthentication);
+
+        // No passo da senha (o do código tem o limite próprio do segundo
+        // fator): bloqueado, nem confere a senha.
+        if ($passwordStep) {
+            app(AttemptLogin::class)->ensureIsNotRateLimited(request(), $email, 'data.email');
+        }
+
         $response = parent::authenticate();
+
+        // Senha aceita = entrou ou está no passo do código. Resposta nula SEM
+        // código pendente é o limite do próprio Filament recusando antes de
+        // conferir a senha: aí nada é zerado.
+        if ($response !== null || filled($this->userUndertakingMultiFactorAuthentication)) {
+            app(AttemptLogin::class)->clearFailedAttempts(request(), $email);
+        }
 
         if (blank($this->userUndertakingMultiFactorAuthentication)) {
             $this->multiFactorChallengeStartedAt = null;
@@ -77,6 +104,24 @@ class Login extends BaseLogin
         }
 
         return $response;
+    }
+
+    /**
+     * Senha errada, conta inexistente ou conta que não entra no painel: conta
+     * nos contadores do login do aplicativo antes da recusa do Filament.
+     */
+    protected function throwFailureValidationException(): never
+    {
+        app(AttemptLogin::class)->recordFailedAttempt(request(), $this->attemptedEmail());
+
+        parent::throwFailureValidationException();
+    }
+
+    private function attemptedEmail(): string
+    {
+        $email = $this->data['email'] ?? null;
+
+        return is_string($email) ? $email : '';
     }
 
     /**

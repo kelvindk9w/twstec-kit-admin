@@ -5,21 +5,28 @@ declare(strict_types=1);
 namespace Twstec\Kit\Admin;
 
 use Filament\PanelRegistry;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Twstec\Kit\Admin\Access\PanelAdministrators;
+use Twstec\Kit\Admin\Access\PanelConfidentialUploadDelivery;
 use Twstec\Kit\Admin\Approvals\ApprovalRegistry;
 use Twstec\Kit\Admin\Approvals\Approvals;
 use Twstec\Kit\Admin\Approvals\Enums\ApprovalMode;
 use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Admin\Console\MakeAdminUser;
+use Twstec\Kit\Admin\Http\Responses\AdminSessionEndedResponse;
 use Twstec\Kit\Admin\Resources\Users\Support\DeleteUserApproval;
 use Twstec\Kit\Admin\Support\AdminAudit;
 use Twstec\Kit\Admin\Support\AdminPanelHardening;
 use Twstec\Kit\Admin\Support\FreshAvatarUploads;
+use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Contracts\IdentifiesAdministrators;
+use Twstec\Kit\Auth\Contracts\Responses\SessionEndedResponse;
+use Twstec\Kit\Foundation\Kit;
 use Twstec\Kit\Foundation\Localization\PackageTranslations;
+use Twstec\Kit\Uploads\Confidential\Contracts\AuthorizesSystemConfidentialDelivery;
 
 /**
  * Provider do twstec/kit-admin (descoberta automática do Laravel).
@@ -59,7 +66,26 @@ final class AdminServiceProvider extends ServiceProvider
         // /admin ou tem algum papel do painel. Um registro do aplicativo
         // (provider dele, depois deste) prevalece.
         $this->app->bind(IdentifiesAdministrators::class, PanelAdministrators::class);
+
+        // Confidencial gerado no /admin: a entrega confere de novo a permissão
+        // de abrir confidencial (o contrato é do twstec/kit-uploads, opcional).
+        // O adaptador anônimo só é declarado aqui, com o módulo presente: a
+        // interface é do uploads (ver PanelConfidentialUploadDelivery).
+        if (Kit::has('uploads')) {
+            $this->app->bind(AuthorizesSystemConfidentialDelivery::class, fn (): AuthorizesSystemConfidentialDelivery => new class implements AuthorizesSystemConfidentialDelivery
+            {
+                public function allows(AuthUser&Model $actor): bool
+                {
+                    return app(PanelConfidentialUploadDelivery::class)->allows($actor);
+                }
+            });
+        }
         $this->app->singleton(ApprovalRegistry::class);
+
+        // Sessão encerrada pela troca de senha/segundo fator em outro lugar:
+        // quem estava no /admin volta ao login do painel (decora a resposta
+        // do twstec/kit-auth — inclusive a que o aplicativo registrar).
+        $this->app->extend(SessionEndedResponse::class, fn (SessionEndedResponse $fallback): SessionEndedResponse => new AdminSessionEndedResponse($fallback));
 
         // Depois que o Filament montou os painéis (os PanelProviders do
         // aplicativo terminaram de configurá-los) e antes de as rotas deles

@@ -18,9 +18,10 @@ use Twstec\Kit\Auth\Contracts\AuthUser;
  * Quem pergunta: o model de usuário do aplicativo (`canAccessPanel`, pela
  * trait Concerns\AccessesAdminPanel), o middleware do pacote
  * (Http\Middleware\EnsureAdminPanelAccess — vale mesmo que o model não
- * implemente o contrato do Filament) e o gate do dashboard de filas do
- * aplicativo (`viewHorizon`, no starter). Revogar o acesso tem de revogar em
- * todas as superfícies, por isso todas leem daqui.
+ * implemente o contrato do Filament) e, por AdminPermissions, o gate do
+ * dashboard de filas do aplicativo (`viewHorizon`, no starter — que pede
+ * também a permissão `horizon.access`, ver HorizonAccess). Revogar o acesso
+ * tem de revogar em todas as superfícies, por isso todas leem daqui.
  */
 final class AdminAccess
 {

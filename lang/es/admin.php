@@ -72,6 +72,7 @@ return [
         'cannot_delete_self' => 'No puede eliminar su propia cuenta.',
         'cannot_block_self' => 'No puede bloquear su propia cuenta.',
         'cannot_remove_last_admin' => 'Este es el último administrador activo: el panel quedaría sin acceso.',
+        'cannot_manage_higher' => 'Esta persona tiene un rol en el panel que usted no podría otorgar: solo quien tiene los mismos permisos puede editarla, bloquearla, desbloquearla, eliminarla o modificar su correo.',
         'action_denied' => 'Acción no permitida',
         'avatar' => 'Foto',
         'avatar_hint' => 'JPG, PNG o WEBP, hasta :max KB. Déjalo vacío para usar las iniciales del nombre.',

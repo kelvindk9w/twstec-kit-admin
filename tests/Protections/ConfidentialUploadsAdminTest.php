@@ -14,6 +14,7 @@ use Twstec\Kit\Accounts\Account\Services\AccountService;
 use Twstec\Kit\Accounts\Accounts;
 use Twstec\Kit\Accounts\Deletion\DeletionImpediment;
 use Twstec\Kit\Accounts\Deletion\DeletionImpediments;
+use Twstec\Kit\Admin\Access\PanelConfidentialUploadDelivery;
 use Twstec\Kit\Admin\Resources\Uploads\Pages\ListUploads;
 use Twstec\Kit\Admin\Resources\Users\Pages\ListUsers;
 use Twstec\Kit\Admin\Resources\Users\Support\UserAdminGuard;
@@ -21,7 +22,9 @@ use Twstec\Kit\Admin\Tests\Fixtures\User;
 use Twstec\Kit\Foundation\Audit\Enums\AuditOutcome;
 use Twstec\Kit\Foundation\Audit\Models\AuditEvent;
 use Twstec\Kit\Uploads\Classification\UploadClassification;
+use Twstec\Kit\Uploads\Confidential\AdministratorFlagDelivery;
 use Twstec\Kit\Uploads\Confidential\ConfidentialAccess;
+use Twstec\Kit\Uploads\Confidential\Contracts\AuthorizesSystemConfidentialDelivery;
 use Twstec\Kit\Uploads\Models\Upload;
 use Twstec\Kit\Uploads\Retention\LegalHold;
 use Twstec\Kit\Uploads\Services\SecureUploadService;
@@ -115,6 +118,34 @@ it('ABRIR o confidencial pelo /admin: a URL nasce no clique, e a geração e a v
     expect($vista->context->value)->toBe('admin')
         ->and($vista->actor_uuid)->toBe((string) $this->operador->uuid)
         ->and($vista->outcome)->toBe(AuditOutcome::Success);
+});
+
+it('a URL gerada no /admin confere de novo a PERMISSÃO na entrega: quem perdeu `uploads.view_confidential` na validade dela não abre', function (): void {
+    $url = (string) (Livewire::test(ListUploads::class)
+        ->callAction(TestAction::make('openConfidential')->table($this->confidencial))
+        ->effects['redirect'] ?? '');
+
+    expect($url)->toContain('acc='.ConfidentialAccess::SYSTEM);
+
+    // Dentro da validade da URL, o papel muda para um que só vê a lista: a
+    // pessoa continua entrando no painel (is_admin), mas não abre mais
+    // confidencial.
+    $this->operador->forceFill(['admin_role' => 'auditor'])->save();
+    app(CurrentAccount::class)->reset();
+
+    $this->get($url)->assertNotFound();
+
+    $recusa = AuditEvent::query()->where('action', ConfidentialAccess::VIEWED)->sole();
+
+    expect($recusa->outcome)->toBe(AuditOutcome::Denied)
+        ->and($recusa->actor_uuid)->toBe((string) $this->operador->uuid)
+        ->and($recusa->reason)->toBe(__('uploads.confidential.no_longer_allowed'))
+        ->and(PanelConfidentialUploadDelivery::permission())->toBe('uploads.view_confidential')
+        ->and(app(AuthorizesSystemConfidentialDelivery::class))->not->toBeInstanceOf(AdministratorFlagDelivery::class);
+
+    // Com a permissão de volta (ainda dentro da validade), a mesma URL abre.
+    $this->operador->forceFill(['admin_role' => 'owner'])->save();
+    expect($this->get($url)->assertOk()->streamedContent())->toContain('DOC-CONFIDENCIAL');
 });
 
 it('quem só tem `*.view` (auditor) vê a lista mas NÃO abre o confidencial: 403 com a recusa na trilha', function (): void {

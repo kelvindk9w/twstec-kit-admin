@@ -30,6 +30,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Auth\Access\Response;
 use Illuminate\Database\Eloquent\Model;
 use Twstec\Kit\Admin\Approvals\Approvals;
 use Twstec\Kit\Admin\Authorization\AdminPermissions;
@@ -49,6 +50,7 @@ use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Enums\UserStatus;
 use Twstec\Kit\Auth\PasswordPolicy;
 use Twstec\Kit\Auth\Support\UserModel;
+use UnitEnum;
 
 /**
  * Usuários (super admin): CRUD completo — listar, ver, criar,
@@ -62,8 +64,10 @@ use Twstec\Kit\Auth\Support\UserModel;
  * quando não há nenhum admin (bootstrap e recuperação de acesso).
  *
  * Guardas de servidor (UserAdminGuard, não apenas botão escondido):
- * contas protegidas intocáveis, o admin não se exclui nem se bloqueia e o último
- * admin ativo (e o último dono) não perde a flag/acesso.
+ * contas protegidas intocáveis, o admin não se exclui nem se bloqueia, o último
+ * admin ativo (e o último dono) não perde a flag/acesso e ninguém edita,
+ * bloqueia, desbloqueia, exclui nem marca o e-mail de quem tem papel no
+ * painel que ele não poderia conceder (a operação não mexe no dono).
  *
  * PAPÉIS: cada ação pede `users.<ação>` (ver, criar, editar, excluir,
  * bloquear, desbloquear, marcar e-mail verificado, atribuir papel). O papel
@@ -269,6 +273,28 @@ final class UserResource extends BaseResource
     }
 
     /**
+     * Além da permissão do papel (BaseResource), editar e excluir uma conta
+     * pedem que ela não esteja ACIMA de quem age (UserAdminGuard, regra 7):
+     * a operação não abre a edição do dono — nem pela URL, nem pelo "Salvar"
+     * de um snapshot (o Filament reconfere `canEdit` a cada chamada) — e o
+     * "Editar"/"Excluir" somem da linha dele.
+     */
+    public static function getAuthorizationResponse(string|UnitEnum $action, ?Model $record = null): Response
+    {
+        $response = parent::getAuthorizationResponse($action, $record);
+
+        $name = $action instanceof UnitEnum ? ($action instanceof BackedEnum ? (string) $action->value : $action->name) : $action;
+
+        if ($response->denied() || ! $record instanceof AuthUser || ! in_array($name, ['update', 'delete', 'forceDelete', 'restore', 'replicate'], true)) {
+            return $response;
+        }
+
+        $motivo = UserAdminGuard::rankDenial($record, auth()->user());
+
+        return $motivo === null ? $response : Response::deny($motivo);
+    }
+
+    /**
      * Nome da Action => ação na permissão (o resto é o nome em snake_case:
      * `block`, `unblock`, `mark_email_verified`).
      *
@@ -322,11 +348,12 @@ final class UserResource extends BaseResource
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make()
-                    ->visible(fn (Model&AuthUser $record): bool => UserAdminGuard::editDenial($record) === null),
+                    ->visible(fn (Model&AuthUser $record): bool => UserAdminGuard::editDenial($record, auth()->user()) === null),
                 Action::make('block')
                     ->label(__('admin.users.block'))
                     ->color('danger')
-                    ->visible(fn (Model&AuthUser $record): bool => $record->status === UserStatus::Active)
+                    ->visible(fn (Model&AuthUser $record): bool => $record->status === UserStatus::Active
+                        && UserAdminGuard::rankDenial($record, auth()->user()) === null)
                     ->requiresConfirmation()
                     ->modalHeading(__('admin.users.block_heading'))
                     ->modalDescription(fn (Model&AuthUser $record): string => __('admin.users.block_warning', ['email' => $record->email]))
@@ -347,12 +374,15 @@ final class UserResource extends BaseResource
                 Action::make('unblock')
                     ->label(__('admin.users.unblock'))
                     ->color('success')
-                    ->visible(fn (Model&AuthUser $record): bool => $record->status === UserStatus::Blocked)
+                    ->visible(fn (Model&AuthUser $record): bool => $record->status === UserStatus::Blocked
+                        && UserAdminGuard::rankDenial($record, auth()->user()) === null)
                     ->requiresConfirmation()
                     ->modalHeading(__('admin.users.unblock_heading'))
                     ->action(function (Model&AuthUser $record): void {
-                        if ($record->isReservedAccount()) {
-                            AdminAudit::denied(__('admin.users.account_protected'), $record, 'unblocked');
+                        // Conta protegida e quem está acima do ator: recusa
+                        // na trilha (`user.unblocked`, denied).
+                        if ($motivo = UserAdminGuard::unblockDenial($record, auth()->user())) {
+                            AdminAudit::denied($motivo, $record, 'unblocked');
 
                             return;
                         }

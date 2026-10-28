@@ -196,13 +196,51 @@ it('declara no composer.json as dependências que usa — foundation e auth obri
         ->and($composer['require-dev'])->toHaveKeys(['twstec/kit-accounts', 'twstec/kit-uploads']);
 });
 
+it('nenhuma classe herda ou implementa algo de accounts ou uploads: carregá-la sem o módulo derrubaria o aplicativo', function (): void {
+    // Nomear uma classe opcional dentro de um método só falha se o método
+    // rodar; já `extends`/`implements` falha ao CARREGAR a classe (um
+    // class_exists, a descoberta de classes, um teste de arquitetura) — com
+    // "interface não encontrada", mesmo com o registro protegido por
+    // Kit::has(). O contrato de um módulo opcional se implementa no ponto do
+    // registro (ver o adaptador do confidencial no AdminServiceProvider).
+    $violations = [];
+
+    foreach ((new Finder)->files()->in(adminRoot().'/src')->name('*.php') as $file) {
+        $source = $file->getContents();
+        $path = str_replace(adminRoot().'/', '', $file->getRealPath());
+
+        $imports = [];
+        preg_match_all('/^use\s+([A-Za-z0-9_\\\\]+)(?:\s+as\s+(\w+))?;/m', $source, $uses, PREG_SET_ORDER);
+        foreach ($uses as $use) {
+            $imports[$use[2] ?? substr((string) strrchr('\\'.$use[1], '\\'), 1)] = $use[1];
+        }
+
+        if (! preg_match('/^(?:final\s+|abstract\s+|readonly\s+)*(?:class|interface|trait|enum)\s+\w+(?:\s*:\s*\w+)?([^{]*)\{/m', $source, $declaration)) {
+            continue;
+        }
+
+        preg_match_all('/[A-Za-z_\\\\][A-Za-z0-9_\\\\]*/', preg_replace('/\b(extends|implements)\b/', ' ', $declaration[1]) ?? '', $names);
+
+        foreach ($names[0] as $name) {
+            $resolved = str_starts_with($name, '\\') ? ltrim($name, '\\') : ($imports[strtok($name, '\\')] ?? $name);
+
+            if (str_starts_with($resolved, 'Twstec\\Kit\\Accounts\\') || str_starts_with($resolved, 'Twstec\\Kit\\Uploads\\')) {
+                $violations[] = "{$path} herda/implementa {$resolved}";
+            }
+        }
+    }
+
+    expect($violations)->toBe([]);
+});
+
 it('só usa accounts e uploads onde pergunta antes se o módulo está instalado', function (): void {
     // Todo arquivo que nomeia uma classe de accounts ou uploads está na lista
     // revisada abaixo — e cada um confere Kit::has() (ou é uma tela, widget ou
     // campo que só é registrado quando o módulo existe). Arquivo novo que
     // passe a nomear um dos dois reprova aqui até ser revisado.
     $registradosSoComOModulo = [
-        // Registrados só com o módulo (AdminPlugin::RESOURCES e os dashboards).
+        // Registrados só com o módulo (AdminPlugin::RESOURCES e os
+        // dashboards).
         'src/Resources/Accounts/AccountResource.php',
         'src/Resources/ApiKeys/ApiKeyResource.php',
         'src/Resources/Projects/ProjectResource.php',
@@ -212,6 +250,7 @@ it('só usa accounts e uploads onde pergunta antes se o módulo está instalado'
     ];
 
     $perguntamAntes = [
+        'src/AdminServiceProvider.php',
         'src/Http/Middleware/OperateAdminPanelAsSystem.php',
         'src/Resources/AuditEvents/AuditEventResource.php',
         'src/Resources/Users/Support/UserAdminGuard.php',

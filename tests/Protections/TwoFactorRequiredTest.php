@@ -16,6 +16,7 @@ use Twstec\Kit\Admin\Pages\Profile;
 use Twstec\Kit\Admin\Tests\Fixtures\User;
 use Twstec\Kit\Auth\Contracts\IdentifiesAdministrators;
 use Twstec\Kit\Auth\Enums\VerificationPurpose;
+use Twstec\Kit\Auth\Http\Middleware\EnsureSessionIsCurrent;
 use Twstec\Kit\Auth\Mail\VerificationCodeMail;
 use Twstec\Kit\Foundation\Audit\Enums\AuditOutcome;
 use Twstec\Kit\Foundation\Audit\Models\AuditEvent;
@@ -202,6 +203,7 @@ it('perfil do /admin: com a regra valendo, desligar fica indisponível e a recus
 it('o plugin declara a barreira na pilha persistente, entre o acesso e o modo sistema', function (): void {
     expect(AdminPlugin::authMiddleware())->toBe([
         Authenticate::class,
+        EnsureSessionIsCurrent::class,
         EnsureAdminPanelAccess::class,
         EnsureAdminTwoFactorIsConfigured::class,
         OperateAdminPanelAsSystem::class,

@@ -249,8 +249,11 @@ de uma tela do painel não passa pela pilha HTTP: declare o modo sistema no
 teste (o starter faz isso para `tests/Feature/Admin` no `tests/Pest.php`).
 
 O dashboard de filas (`/horizon`) é do aplicativo (o Horizon não é
-dependência do pacote), mas o gate `viewHorizon` do starter lê o mesmo
-critério: `AdminAccess::allows($user)`.
+dependência do pacote), mas o gate `viewHorizon` do starter lê o critério
+daqui: `HorizonAccess::allows($user)` — entrada no painel (`AdminAccess`) E
+a permissão `horizon.access` no papel (de fábrica, `owner` e `operations`;
+fora de `*.view` de propósito, porque o dashboard mostra payload de job e
+refaz/apaga job).
 
 ## Tema e CSS
 

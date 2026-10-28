@@ -29,6 +29,7 @@ use Twstec\Kit\Admin\Support\AdminPanelHardening;
 use Twstec\Kit\Admin\Tests\Fixtures\AdminPanelProvider;
 use Twstec\Kit\Admin\Tests\Fixtures\User;
 use Twstec\Kit\Admin\Tests\TestCase;
+use Twstec\Kit\Auth\Http\Middleware\EnsureSessionIsCurrent;
 use Twstec\Kit\Foundation\Security\Middleware\EnsureAdminIpAllowed;
 
 // =============================================================================
@@ -97,7 +98,7 @@ it('a barreira de origem é o PRIMEIRO middleware do painel e é persistente; o 
         ->and($middleware[1])->toBe(EnsureAdminIpAllowed::class)
         // + o modo sistema das contas, depois do acesso de admin (F8a), e o
         // segundo fator obrigatório entre os dois (issue #22).
-        ->and($this->panel()->getAuthMiddleware())->toBe([Authenticate::class, EnsureAdminPanelAccess::class, EnsureAdminTwoFactorIsConfigured::class, OperateAdminPanelAsSystem::class])
+        ->and($this->panel()->getAuthMiddleware())->toBe([Authenticate::class, EnsureSessionIsCurrent::class, EnsureAdminPanelAccess::class, EnsureAdminTwoFactorIsConfigured::class, OperateAdminPanelAsSystem::class])
         ->and(app(PersistentMiddleware::class)->getPersistentMiddleware())
         ->toContain(EnsureAdminIpAllowed::class, Authenticate::class, EnsureAdminPanelAccess::class, EnsureAdminTwoFactorIsConfigured::class, OperateAdminPanelAsSystem::class)
         ->and(AdminPanelHardening::holds($this->panel()))->toBeTrue();

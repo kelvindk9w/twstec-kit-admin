@@ -87,8 +87,13 @@ it('EDITAR usuário pelo painel grava user.updated só com o que mudou', functio
     $evento = adminAuditRow('user.updated', $alvo->uuid);
 
     expect($alvo->fresh()->name)->toBe('Carlos Novo')
-        ->and(array_keys($evento->changes))->toEqualCanonicalizing(['name', 'password'])
+        // Senha nova renova o remember_token (os cookies "lembrar de mim"
+        // antigos deixam de entrar — twstec/kit-auth, EndsOtherSessions): a
+        // trilha registra QUE mudou, nunca o valor.
+        ->and(array_keys($evento->changes))->toEqualCanonicalizing(['name', 'password', 'remember_token'])
         ->and($evento->changes['password'])->toBe(['before' => '[REDACTED]', 'after' => '[REDACTED]'])
+        ->and($evento->changes['remember_token']['after'])->toBe('[REDACTED]')
+        ->and(json_encode($evento->getAttributes()))->not->toContain((string) $alvo->fresh()?->getRememberToken())
         ->and($evento->actor_uuid)->toBe($this->operador->uuid)
         ->and(json_encode($evento->getAttributes()))->not->toContain('Outra-Senha456');
 });

@@ -15,8 +15,9 @@ use Twstec\Kit\Admin\Compat\LegacyNames;
  * Duas fontes gravam assim:
  *
  * - o FILAMENT, por tabela (listagens e widgets de tabela): itens por página,
- *   ordenação, filtros, busca, colunas escolhidas e agrupamento, na chave
- *   `tables.<md5 da classe>_<estado>`;
+ *   ordenação, filtros, busca, colunas escolhidas e agrupamento — na 1.x, na
+ *   chave `tables.<md5 da classe>_<estado>`; a chave nova é a do Filament
+ *   instalado (Concerns\MigratesLegacyTableState);
  * - o PAINEL, por resource: o modo tabela/cards (ViewMode), na chave
  *   `admin.view_mode.<classe com pontos>`.
  *
@@ -43,9 +44,27 @@ final class LegacySessionState
     ];
 
     /**
-     * Migra o estado de tabela da classe `$class` (componente de tabela).
+     * Migra o estado de tabela da classe `$class` para as chaves no formato
+     * do Filament até a 5.10 (`tables.<md5 da classe>_<estado>`).
+     *
+     * As telas do painel NÃO usam mais este atalho: elas migram chave a
+     * chave, com a chave que o Filament instalado calcula
+     * (Concerns\MigratesLegacyTableState → migrateTableKey) — o formato
+     * mudou na 5.11.
      */
     public static function migrateTable(string $class, ?Session $session = null): void
+    {
+        foreach (self::TABLE_SUFFIXES as $suffix) {
+            self::migrateTableKey($class, $suffix, self::legacyTableKey($class, $suffix), $session);
+        }
+    }
+
+    /**
+     * Migra UM estado de tabela (`$suffix`, ex.: `per_page`) da classe
+     * `$class`: o valor gravado pelo nome antigo vai para a chave `$to` — a
+     * que o Filament instalado usa para o nome novo.
+     */
+    public static function migrateTableKey(string $class, string $suffix, string $to, ?Session $session = null): void
     {
         $old = LegacyNames::previous($class);
 
@@ -59,9 +78,15 @@ final class LegacySessionState
             return;
         }
 
-        foreach (self::TABLE_SUFFIXES as $suffix) {
-            self::move($session, 'tables.'.md5($old).'_'.$suffix, 'tables.'.md5($class).'_'.$suffix);
-        }
+        self::move($session, self::legacyTableKey($old, $suffix), $to);
+    }
+
+    /**
+     * A chave em que o Filament da 1.x (5.x até a 5.10) gravava o estado.
+     */
+    public static function legacyTableKey(string $class, string $suffix): string
+    {
+        return 'tables.'.md5($class).'_'.$suffix;
     }
 
     /**

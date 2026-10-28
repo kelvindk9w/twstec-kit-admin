@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 
-use Filament\Notifications\Livewire\Notifications as FilamentNotifications;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -532,11 +533,19 @@ it('a notificação do pedido feito pela tela traz o link do pedido', function (
 
     $pedido = ApprovalRequest::query()->sole();
 
-    $notificacoes = new FilamentNotifications;
-    $notificacoes->mount();
-    $enviada = $notificacoes->notifications->first(fn ($n): bool => $n->getTitle() === __('admin.approvals.requested'));
-
-    expect($enviada)->not->toBeNull()
-        ->and(collect($enviada->getActions())->map(fn ($a) => $a->getUrl())->all())
-        ->toContain(ApprovalRequestResource::getUrl('view', ['record' => $pedido]));
+    // A notificação INTEIRA — título, texto e o botão com o link do pedido —,
+    // pela asserção do próprio Filament: onde ele guarda a notificação
+    // enviada mudou na 5.11 (sessão → NotificationMailbox), e ler o
+    // componente de notificações por dentro deixava de enxergá-la.
+    Notification::assertNotified(
+        Notification::make()
+            ->success()
+            ->title(__('admin.approvals.requested'))
+            ->body(__('admin.approvals.requested_body'))
+            ->actions([
+                Action::make('viewApprovalRequest')
+                    ->label(__('admin.approvals.view_request'))
+                    ->url(ApprovalRequestResource::getUrl('view', ['record' => $pedido])),
+            ]),
+    );
 });

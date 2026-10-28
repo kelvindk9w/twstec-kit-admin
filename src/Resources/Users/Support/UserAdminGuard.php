@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Twstec\Kit\Admin\Resources\Users\Support;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Twstec\Kit\Accounts\Account\Exceptions\OwnerOfSharedAccountException;
 use Twstec\Kit\Accounts\Account\Services\AccountService;
@@ -35,7 +36,13 @@ use Twstec\Kit\Foundation\Kit;
  *    papel nem mexe no que só o dono pode;
  * 6. conceder ou tirar a flag de acesso pelo formulário pede a permissão de
  *    atribuir papel (`users.assign_role`), e quem a concede não reativa
- *    um papel que não poderia atribuir (ver AdminPermissions::canGrant).
+ *    um papel que não poderia atribuir (ver AdminPermissions::canGrant);
+ * 7. SEM ESCALADA PELO ALVO: ninguém edita, bloqueia, desbloqueia, exclui
+ *    nem marca o e-mail de quem tem um papel no painel que ele não poderia
+ *    conceder (AdminPermissions::canGrant com o papel ATUAL do alvo — a
+ *    mesma regra de "Alterar papel", AdminRoles). Sem ela, a operação
+ *    trocava o e-mail e a senha do dono e entrava como ele. Papel igual ou
+ *    abaixo do do ator pode; ator desconhecido (nulo) não mexe em admin.
  *
  * Cada método devolve NULL quando a ação é permitida ou a mensagem
  * traduzida do motivo quando não é.
@@ -44,10 +51,36 @@ final class UserAdminGuard
 {
     /**
      * Pode editar este registro?
+     *
+     * Sem o ator (chamada antiga, de antes da regra 7), a resposta é a de
+     * quem não mexe em admin nenhum: falha fechada.
      */
-    public static function editDenial(Model&AuthUser $record): ?string
+    public static function editDenial(Model&AuthUser $record, ?Authenticatable $actor = null): ?string
     {
-        return $record->isReservedAccount() ? __('admin.users.account_protected') : null;
+        if ($record->isReservedAccount()) {
+            return __('admin.users.account_protected');
+        }
+
+        return self::rankDenial($record, $actor);
+    }
+
+    /**
+     * Regra 7 — o alvo tem um papel no painel que o ator não poderia
+     * conceder? (Papel nulo ou que não existe mais na configuração não dá
+     * permissão nenhuma: não está acima de ninguém.)
+     *
+     * Vale também com ADMIN_AUTHORIZATION=false, como a mesma regra em
+     * AdminRoles: a escalada pelo alvo não é "uma permissão a mais".
+     */
+    public static function rankDenial(Model&AuthUser $record, ?Authenticatable $actor): ?string
+    {
+        $role = AdminPermissions::roleOf($record);
+
+        if ($role === null || ! AdminPermissions::exists($role)) {
+            return null;
+        }
+
+        return AdminPermissions::canGrant($actor, $role) ? null : __('admin.users.cannot_manage_higher');
     }
 
     /**
@@ -55,11 +88,16 @@ final class UserAdminGuard
      *
      * Conta protegida fica de fora como nas demais ações: ela já conta como
      * verificada enquanto a proteção vale (User::hasVerifiedEmail) e não é
-     * o suporte quem mexe nela.
+     * o suporte quem mexe nela. E o e-mail de quem está acima do ator
+     * (regra 7) também não é ele quem confirma.
      */
-    public static function verifyEmailDenial(Model&AuthUser $record): ?string
+    public static function verifyEmailDenial(Model&AuthUser $record, ?Authenticatable $actor = null): ?string
     {
-        return $record->isReservedAccount() ? __('admin.users.account_protected') : null;
+        if ($record->isReservedAccount()) {
+            return __('admin.users.account_protected');
+        }
+
+        return self::rankDenial($record, $actor);
     }
 
     /**
@@ -77,6 +115,10 @@ final class UserAdminGuard
 
         if (self::isLastActiveAdmin($record) || self::isLastActiveSuperAdmin($record)) {
             return __('admin.users.cannot_remove_last_admin');
+        }
+
+        if ($motivo = self::rankDenial($record, $actor)) {
+            return $motivo;
         }
 
         // Dono de conta com outros membros: a propriedade é transferida antes
@@ -136,7 +178,20 @@ final class UserAdminGuard
             return __('admin.users.cannot_remove_last_admin');
         }
 
-        return null;
+        return self::rankDenial($record, $actor);
+    }
+
+    /**
+     * Pode desbloquear este registro? Devolver o acesso a quem está acima do
+     * ator (regra 7) também não é com ele.
+     */
+    public static function unblockDenial(Model&AuthUser $record, (Model&AuthUser)|null $actor): ?string
+    {
+        if ($record->isReservedAccount()) {
+            return __('admin.users.account_protected');
+        }
+
+        return self::rankDenial($record, $actor);
     }
 
     /**
@@ -156,6 +211,12 @@ final class UserAdminGuard
 
         if (($viraNaoAdmin || $viraInativo) && (self::isLastActiveAdmin($record) || self::isLastActiveSuperAdmin($record))) {
             return __('admin.users.cannot_remove_last_admin');
+        }
+
+        // Qualquer alteração — nome, e-mail, senha, situação — em quem está
+        // acima do ator (regra 7).
+        if ($motivo = self::rankDenial($record, $actor)) {
+            return $motivo;
         }
 
         $mudaAcesso = array_key_exists('is_admin', $data) && (bool) $data['is_admin'] !== (bool) $record->getAttribute('is_admin');

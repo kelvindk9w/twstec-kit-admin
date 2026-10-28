@@ -72,6 +72,7 @@ return [
         'cannot_delete_self' => 'You cannot delete your own account.',
         'cannot_block_self' => 'You cannot block your own account.',
         'cannot_remove_last_admin' => 'This is the last active administrator: the panel would be left without access.',
+        'cannot_manage_higher' => 'This person has a panel role you could not grant: only someone with the same permissions can edit, block, unblock, delete or touch their email.',
         'action_denied' => 'Action not allowed',
         'avatar' => 'Photo',
         'avatar_hint' => 'JPG, PNG or WEBP, up to :max KB. Leave empty to use the name initials.',

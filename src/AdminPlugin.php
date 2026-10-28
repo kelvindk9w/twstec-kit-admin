@@ -39,6 +39,7 @@ use Twstec\Kit\Admin\Resources\Uploads\UploadResource;
 use Twstec\Kit\Admin\Resources\Users\UserResource;
 use Twstec\Kit\Admin\Support\AdminPanelHardening;
 use Twstec\Kit\Admin\Support\InitialsAvatarProvider;
+use Twstec\Kit\Auth\Http\Middleware\EnsureSessionIsCurrent;
 use Twstec\Kit\Auth\Support\TwoFactorRequirement;
 use Twstec\Kit\Foundation\Kit;
 use Twstec\Kit\Foundation\Localization\Middleware\SetLocale;
@@ -255,7 +256,11 @@ final class AdminPlugin implements Plugin
 
     /**
      * Autenticação do painel: o Authenticate do Filament (quem não está logado
-     * vai para o login), o acesso só de admin com conta ativa, conferido pelo
+     * vai para o login), a sessão aberta com uma senha ou um estado do segundo
+     * fator que já mudou encerrada (EnsureSessionIsCurrent do twstec/kit-auth
+     * — o painel não passa pelo grupo `web`, onde o pacote a instala; sem
+     * ela, o AuthenticateSession do framework derrubava só a troca de senha,
+     * não a do segundo fator), o acesso só de admin com conta ativa, conferido pelo
      * pacote, o segundo fator obrigatório (quando a regra do twstec/kit-auth
      * alcança os administradores; sem a regra, não faz nada) e — depois deles —
      * o MODO SISTEMA das contas (o painel vê todas as contas; ver
@@ -268,6 +273,7 @@ final class AdminPlugin implements Plugin
     {
         return [
             Authenticate::class,
+            EnsureSessionIsCurrent::class,
             EnsureAdminPanelAccess::class,
             EnsureAdminTwoFactorIsConfigured::class,
             OperateAdminPanelAsSystem::class,
