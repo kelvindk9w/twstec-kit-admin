@@ -24,6 +24,7 @@ use Twstec\Kit\Admin\Support\FreshAvatarUploads;
 use Twstec\Kit\Auth\Contracts\AuthUser;
 use Twstec\Kit\Auth\Contracts\IdentifiesAdministrators;
 use Twstec\Kit\Auth\Contracts\Responses\SessionEndedResponse;
+use Twstec\Kit\Foundation\Customization\PackageConfig;
 use Twstec\Kit\Foundation\Kit;
 use Twstec\Kit\Foundation\Localization\PackageTranslations;
 use Twstec\Kit\Uploads\Confidential\Contracts\AuthorizesSystemConfidentialDelivery;
@@ -56,8 +57,8 @@ final class AdminServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom($this->path('config/admin.php'), 'admin');
-        $this->mergeConfigFrom($this->path('config/dashboards.php'), 'dashboards');
+        PackageConfig::merge($this->app, $this->path('config/admin.php'), 'admin');
+        PackageConfig::merge($this->app, $this->path('config/dashboards.php'), 'dashboards');
 
         $this->app->scoped(FreshAvatarUploads::class);
 

@@ -54,7 +54,8 @@ it('(a) chave só no pacote: texto do pacote', function (string $locale): void {
     adminAppLang(["{$locale}/outro.php" => ['x' => 'y']]);
 
     $pacote = adminPackageLang("{$locale}/admin.php");
-    $panel = adminPackageLang("{$locale}/panel.php");
+    // O painel do usuário (`panel`) é do twstec/kit-auth: o /admin reaproveita.
+    $panel = require dirname(__DIR__, 2)."/vendor/twstec/kit-auth/lang/{$locale}/panel.php";
 
     expect(__('admin.users.plural', [], $locale))->toBe($pacote['users']['plural'])
         ->and(__('admin.users.cannot_block_self', [], $locale))->toBe($pacote['users']['cannot_block_self'])

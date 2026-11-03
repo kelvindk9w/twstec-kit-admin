@@ -60,7 +60,7 @@ it('todos os idiomas têm os mesmos arquivos e chaves do pt-BR', function (): vo
         $reference[basename($file)] = collect(require $file)->dot()->keys()->sort()->values();
     }
 
-    expect(array_keys($reference))->toBe(['admin.php', 'auth.php', 'panel.php']);
+    expect(array_keys($reference))->toBe(['admin.php']);
 
     foreach (['en', 'es'] as $locale) {
         foreach ($reference as $file => $keys) {
@@ -96,9 +96,10 @@ it('toda chave que o código e as views do pacote pedem existe — no pacote ou 
         foreach (ADMIN_LOCALES as $locale) {
             $fontes = [adminLangPath("{$locale}/{$group}.php")];
 
-            // As mensagens de autenticação que o twstec/kit-auth já traz.
-            if ($group === 'auth') {
-                $fontes[] = dirname(__DIR__, 2).'/vendor/twstec/kit-auth/lang/'.$locale.'/auth.php';
+            // Os textos de autenticação e do painel do usuário que o
+            // twstec/kit-auth traz (o /admin reaproveita os mesmos rótulos).
+            if (in_array($group, ['auth', 'panel'], true)) {
+                $fontes[] = dirname(__DIR__, 2).'/vendor/twstec/kit-auth/lang/'.$locale.'/'.$group.'.php';
             }
 
             $achou = false;
@@ -117,11 +118,11 @@ it('toda chave que o código e as views do pacote pedem existe — no pacote ou 
         ->and($faltando)->toBe([]);
 });
 
-it('as chaves de auth trazidas pelo pacote não repetem as do twstec/kit-auth (cada texto tem um dono)', function (string $locale): void {
-    $doPacote = collect(require adminLangPath("{$locale}/auth.php"))->dot()->keys();
-    $doAuth = collect(require dirname(__DIR__, 2).'/vendor/twstec/kit-auth/lang/'.$locale.'/auth.php')->dot()->keys();
-
-    expect($doPacote->intersect($doAuth)->values()->all())->toBe([]);
+it('os textos de auth e do painel do usuário não se repetem aqui: são do twstec/kit-auth (cada texto tem um dono)', function (string $locale): void {
+    expect(adminLangPath("{$locale}/auth.php"))->not->toBeFile()
+        ->and(adminLangPath("{$locale}/panel.php"))->not->toBeFile()
+        ->and(__('panel.common.save', [], $locale))->toBe((require dirname(__DIR__, 2).'/vendor/twstec/kit-auth/lang/'.$locale.'/panel.php')['common']['save'])
+        ->and(__('auth.two_factor.title', [], $locale))->toBe((require dirname(__DIR__, 2).'/vendor/twstec/kit-auth/lang/'.$locale.'/auth.php')['two_factor']['title']);
 })->with(ADMIN_LOCALES);
 
 it('o grupo admin do pacote não traz texto da demonstração do kit', function (): void {

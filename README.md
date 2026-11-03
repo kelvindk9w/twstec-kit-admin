@@ -131,8 +131,10 @@ $panel
     ->plugin(MeuPlugin::make());
 ```
 
-Configuração (`config/admin.php` e `config/dashboards.php`, publicáveis com
-`--tag=admin-config`; a do aplicativo vence chave a chave):
+Configuração (`config/admin.php` e `config/dashboards.php`, no pacote; um
+arquivo de mesmo nome no aplicativo só com as chaves de primeiro nível que
+muda vence cada uma inteira — ver
+[personalização](../../docs/personalizacao.md)):
 
 | Chave | Padrão | O que faz |
 | --- | --- | --- |
