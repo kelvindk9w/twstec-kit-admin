@@ -14,7 +14,8 @@ e-mail, variantes de dashboard, a trilha de auditoria de toda ação do painel
 (que falha fechada) e as proteções de acesso — ligadas pelo pacote, não pelo
 aplicativo.
 
-É a camada de cima do kit e o único pacote com telas: depende do
+É a camada de cima do kit e o pacote das telas do `/admin` (as do painel do
+cliente vêm do `twstec/kit-foundation`): depende do
 [`twstec/kit-auth`](https://github.com/kelvindk9w/tws-laravel-starter-kit/tree/desenvolvimento/packages/auth), do [`twstec/kit-foundation`](https://github.com/kelvindk9w/tws-laravel-starter-kit/tree/desenvolvimento/packages/foundation), do
 Laravel e do Filament (com o Livewire, que o Filament usa). O
 [`twstec/kit-accounts`](https://github.com/kelvindk9w/tws-laravel-starter-kit/tree/desenvolvimento/packages/accounts) e o [`twstec/kit-uploads`](https://github.com/kelvindk9w/tws-laravel-starter-kit/tree/desenvolvimento/packages/uploads) são
@@ -105,7 +106,8 @@ O `AdminServiceProvider` é descoberto automaticamente. O aplicativo precisa de:
    com a trait `Twstec\Kit\Admin\Concerns\AccessesAdminPanel` (além das do
    `twstec/kit-auth` e do `HasAvatar` do `twstec/kit-uploads`), e as colunas
    `users.is_admin` (boolean, padrão `false`) e `users.avatar_upload_id` numa
-   migration do aplicativo. O pacote não traz migration.
+   migration do aplicativo. As migrations do pacote acrescentam só
+   `users.admin_role` e a tabela das aprovações em dois passos.
 
 3. **O tema** (opcional, para o visual do kit): um tema Vite do Filament que
    importe as fontes do pacote — ver [Tema e CSS](#tema-e-css).
