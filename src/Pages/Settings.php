@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Twstec\Kit\Admin\Pages;
 
 use BackedEnum;
+use Filament\Forms\Components\Field;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -15,6 +17,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Lang;
 use Twstec\Kit\Admin\Authorization\AdminPermissions;
 use Twstec\Kit\Admin\Authorization\Contracts\GuardedByPermission;
 use Twstec\Kit\Foundation\Settings\SettingsManager;
@@ -105,9 +108,10 @@ final class Settings extends Page implements GuardedByPermission, HasForms
 
         $state = [];
 
-        foreach (array_keys($settings->whitelist()) as $key) {
-            // Vazio quando NÃO há override — o placeholder mostra o valor do .env.
-            $state[self::fieldName($key)] = $overrides[$key] ?? null;
+        foreach ($settings->whitelist() as $key => $meta) {
+            // Vazio quando NÃO há override — a ajuda mostra o valor do .env.
+            $value = $overrides[$key] ?? null;
+            $state[self::fieldName($key)] = is_bool($value) ? ($value ? '1' : '0') : $value;
         }
 
         $this->form->fill($state);
@@ -124,12 +128,9 @@ final class Settings extends Page implements GuardedByPermission, HasForms
         $grupos = [];
 
         foreach ($settings->whitelist() as $key => $meta) {
-            $grupos[$meta['group'] ?? 'other'][] = TextInput::make(self::fieldName($key))
+            $grupos[$meta['group'] ?? 'other'][] = self::field($key, $meta)
                 ->label(__('admin.settings.key_'.self::fieldName($key)))
-                ->helperText(__('admin.settings.env_fallback', ['value' => config($key)]))
-                ->numeric()
-                ->minValue($meta['min'])
-                ->maxValue($meta['max'])
+                ->helperText(__('admin.settings.env_fallback', ['value' => self::display($key, $meta, config($key))]))
                 ->columnSpan($meta['span'] ?? 4)
                 ->nullable();
         }
@@ -153,11 +154,10 @@ final class Settings extends Page implements GuardedByPermission, HasForms
 
         // Uma transação: as mudanças e as linhas da trilha entram juntas.
         DB::transaction(function () use ($settings, $state): void {
-            foreach (array_keys($settings->whitelist()) as $key) {
-                $value = $state[self::fieldName($key)] ?? null;
-
-                // Vazio = remove o override (volta ao .env). Valor = grava.
-                $settings->set($key, $value === null || $value === '' ? null : (int) $value);
+            foreach ($settings->whitelist() as $key => $meta) {
+                // Vazio = remove o override (volta ao .env). Valor = grava, no
+                // tipo declarado (o SettingsManager recusa o que não serve).
+                $settings->set($key, self::typed($meta, $state[self::fieldName($key)] ?? null));
             }
         });
 
@@ -165,6 +165,83 @@ final class Settings extends Page implements GuardedByPermission, HasForms
             ->success()
             ->title(__('admin.settings.saved'))
             ->send();
+    }
+
+    /**
+     * O campo de cada tipo (config/settings.php): número com limites,
+     * liga/desliga, escolha entre as opções ou texto curto.
+     *
+     * Liga/desliga é uma escolha (Ligado/Desligado) e não um interruptor: o
+     * interruptor não tem o terceiro estado, "vazio = vale o .env".
+     *
+     * @param  array<string, mixed>  $meta
+     */
+    private static function field(string $key, array $meta): Field
+    {
+        $name = self::fieldName($key);
+
+        return match ($meta['type'] ?? 'int') {
+            'bool' => Select::make($name)
+                ->options(['1' => __('admin.settings.on'), '0' => __('admin.settings.off')])
+                ->placeholder(__('admin.settings.use_env')),
+            'enum' => Select::make($name)
+                ->options(collect(SettingsManager::options($meta))
+                    ->mapWithKeys(fn (string $option): array => [$option => self::optionLabel($name, $option)])
+                    ->all())
+                ->placeholder(__('admin.settings.use_env')),
+            'string' => TextInput::make($name)
+                ->maxLength(SettingsManager::maxLength($meta))
+                ->regex(isset($meta['pattern']) && is_string($meta['pattern']) ? $meta['pattern'] : null),
+            default => TextInput::make($name)
+                ->numeric()
+                ->integer()
+                ->minValue(is_int($meta['min'] ?? null) ? $meta['min'] : null)
+                ->maxValue(is_int($meta['max'] ?? null) ? $meta['max'] : null),
+        };
+    }
+
+    /**
+     * O valor do formulário no tipo declarado; vazio = null (sem override).
+     *
+     * @param  array<string, mixed>  $meta
+     */
+    private static function typed(array $meta, mixed $value): int|bool|string|null
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return match ($meta['type'] ?? 'int') {
+            'bool' => in_array($value, [true, 1, '1'], true),
+            'enum', 'string' => is_scalar($value) ? (string) $value : null,
+            default => is_numeric($value) ? (int) $value : null,
+        };
+    }
+
+    /**
+     * O valor do .env na ajuda do campo, legível para o tipo.
+     *
+     * @param  array<string, mixed>  $meta
+     */
+    private static function display(string $key, array $meta, mixed $value): string
+    {
+        return match (true) {
+            ($meta['type'] ?? null) === 'bool' => (string) __($value ? 'admin.settings.on' : 'admin.settings.off'),
+            ($meta['type'] ?? null) === 'enum' && is_string($value) => self::optionLabel(self::fieldName($key), $value),
+            is_scalar($value) => (string) $value,
+            default => '—',
+        };
+    }
+
+    /**
+     * Rótulo de uma opção de enum: admin.settings.option_<campo>_<valor>,
+     * ou o próprio valor quando o projeto não deu rótulo.
+     */
+    private static function optionLabel(string $field, string $option): string
+    {
+        $translation = 'admin.settings.option_'.$field.'_'.$option;
+
+        return Lang::has($translation) ? (string) __($translation) : $option;
     }
 
     /**
