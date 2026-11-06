@@ -71,7 +71,7 @@ combinação, no CI.
 Pelo Packagist:
 
 ```bash
-composer require "twstec/kit-admin:^2.0@beta"   # durante o beta; na 2.0.0 estável, ^2.0
+composer require "twstec/kit-admin:~2.0@beta"   # durante o beta; na 2.0.0 estável, ~2.0
 ```
 
 Durante o beta, cada pacote do kit que você requerer leva o `@beta` (ou o
@@ -353,12 +353,6 @@ Onde o nome antigo pode estar gravado, e o que acontece:
 - **exports/imports do Filament e jobs**: o painel não tem exportação,
   importação nem job com o nome da classe; a trilha de auditoria grava o nome
   curto do model (`user`), nunca a classe.
-
-## Lacunas conhecidas
-
-- A coluna de código público das listagens pede `admin.common.code`, chave que
-  nunca existiu (a 1.x já mostrava a chave crua). A extração manteve a tela
-  idêntica; a correção é uma mudança de texto própria.
 
 ## Testes
 

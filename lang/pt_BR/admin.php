@@ -17,6 +17,7 @@ return [
     // Blocos que TODA listagem do super admin usa (ver BaseResource e
     // AdminColumns): não repetir rótulo comum resource a resource.
     'common' => [
+        'code' => 'Código',
         'account' => 'Conta',
         'account_filter' => 'Conta (código)',
         'created_by' => 'Criado por',

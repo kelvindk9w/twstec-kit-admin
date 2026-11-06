@@ -17,6 +17,7 @@ return [
     // Blocks every super admin listing uses (see BaseResource and
     // AdminColumns): shared labels are not repeated resource by resource.
     'common' => [
+        'code' => 'Code',
         'account' => 'Account',
         'account_filter' => 'Account (code)',
         'created_by' => 'Created by',

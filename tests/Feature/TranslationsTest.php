@@ -12,15 +12,6 @@ use Illuminate\Support\Arr;
 
 const ADMIN_LOCALES = ['pt_BR', 'en', 'es'];
 
-/**
- * Lacuna JÁ EXISTENTE na 1.x, mantida de propósito nesta extração (o painel
- * tem de sair idêntico): a coluna de código público pede `admin.common.code`,
- * que nunca existiu, e a tela mostra a chave crua. Corrigir é mudança de
- * texto na tela — fica para uma mudança própria (README, "Lacunas conhecidas"). Qualquer
- * OUTRA chave faltando reprova.
- */
-const ADMIN_KNOWN_MISSING = ['admin.common.code'];
-
 function adminLangPath(string $relative): string
 {
     return dirname(__DIR__, 2).'/lang/'.$relative;
@@ -90,7 +81,7 @@ it('toda chave que o código e as views do pacote pedem existe — no pacote ou 
     $pedidas = adminRequestedKeys();
     $faltando = [];
 
-    foreach (array_diff($pedidas, ADMIN_KNOWN_MISSING) as $key) {
+    foreach ($pedidas as $key) {
         [$group, $item] = explode('.', $key, 2);
 
         foreach (ADMIN_LOCALES as $locale) {
