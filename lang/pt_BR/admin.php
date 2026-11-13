@@ -108,6 +108,17 @@ return [
         'section_api_keys' => 'Chaves de API da conta',
         'no_projects' => 'Nenhum projeto.',
         'no_api_keys' => 'Nenhuma chave.',
+        'section_api_limits' => 'Limites da API',
+        'api_limits_enabled' => 'O que vale para esta conta: o menor entre o valor da plataforma e a redução escolhida pelo dono.',
+        'api_limits_disabled' => 'Os limites por conta estão desligados nesta instalação (API_LIMITS_ENABLED); os valores ficam guardados para quando forem ligados.',
+        'api_limits_summary' => ':effective (plataforma: :platform; dono: :own)',
+        'api_limits_default' => 'padrão, :value',
+        'api_limits_no_reduction' => 'sem redução',
+        'api_limits_edit' => 'Limites da API',
+        'api_limits_heading' => 'Limites da API desta conta',
+        'api_limits_description' => 'O que a plataforma dá a esta conta. Campo vazio volta ao padrão da instalação. Se o dono tiver escolhido um valor menor, vale o dele.',
+        'api_limits_save' => 'Salvar limites',
+        'api_limits_saved' => 'Limites da API salvos.',
     ],
 
     'api_keys' => [

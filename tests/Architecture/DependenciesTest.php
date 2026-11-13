@@ -242,6 +242,8 @@ it('só usa accounts e uploads onde pergunta antes se o módulo está instalado'
         // Registrados só com o módulo (AdminPlugin::RESOURCES e os
         // dashboards).
         'src/Resources/Accounts/AccountResource.php',
+        // Só a página de detalhe do AccountResource a usa (ViewAccount).
+        'src/Resources/Accounts/Support/SetApiLimitsAction.php',
         'src/Resources/ApiKeys/ApiKeyResource.php',
         'src/Resources/Projects/ProjectResource.php',
         'src/Resources/Uploads/UploadResource.php',

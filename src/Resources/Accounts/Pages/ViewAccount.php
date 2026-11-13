@@ -6,8 +6,14 @@ namespace Twstec\Kit\Admin\Resources\Accounts\Pages;
 
 use Filament\Resources\Pages\ViewRecord;
 use Twstec\Kit\Admin\Resources\Accounts\AccountResource;
+use Twstec\Kit\Admin\Resources\Accounts\Support\SetApiLimitsAction;
 
 final class ViewAccount extends ViewRecord
 {
     protected static string $resource = AccountResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [SetApiLimitsAction::make()];
+    }
 }

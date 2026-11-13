@@ -78,6 +78,7 @@ final class AdminAudit
         'confirmApprove' => 'approved',
         'reject' => 'rejected',
         'execute' => 'executed',
+        'setApiLimits' => 'api_limits_changed',
     ];
 
     /**

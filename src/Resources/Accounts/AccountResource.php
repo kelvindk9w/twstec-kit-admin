@@ -25,6 +25,8 @@ use Twstec\Kit\Accounts\Account\Enums\AccountRole;
 use Twstec\Kit\Accounts\Account\Models\Account;
 use Twstec\Kit\Accounts\Account\Models\AccountMembership;
 use Twstec\Kit\Accounts\ApiKeys\Models\ApiKey;
+use Twstec\Kit\Accounts\Tenancy\Limits\ApiLimit;
+use Twstec\Kit\Accounts\Tenancy\Limits\ApiLimits;
 use Twstec\Kit\Accounts\Tenancy\Models\Project;
 use Twstec\Kit\Admin\Resources\Accounts\Pages\ListAccounts;
 use Twstec\Kit\Admin\Resources\Accounts\Pages\ViewAccount;
@@ -38,6 +40,9 @@ use Twstec\Kit\Admin\Support\BaseResource;
  * (pessoal ou empresa), o dono e quantos membros, projetos e chaves cada uma
  * tem; o detalhe mostra os membros com o papel e os projetos e chaves da
  * conta (só identificadores públicos — nunca a secreta).
+ *
+ * A única escrita é a dos LIMITES DA API da conta (Support\SetApiLimitsAction,
+ * permissão `accounts.set_api_limits`, com trilha).
  *
  * Nada de criar, editar ou excluir por aqui: membros, convites, transferência
  * e exclusão são da própria conta, pelo painel (com a regra do dono, a
@@ -155,6 +160,15 @@ final class AccountResource extends BaseResource
                         ->dateTime('d/m/Y H:i', platform()->displayTimezone),
                 ]),
 
+            Section::make(__('admin.accounts.section_api_limits'))
+                ->description(fn (): string => ApiLimits::enabled() ? __('admin.accounts.api_limits_enabled') : __('admin.accounts.api_limits_disabled'))
+                ->columns(3)
+                ->columnSpanFull()
+                ->collapsible()
+                ->schema(array_map(static fn (ApiLimit $limit): TextEntry => TextEntry::make('api_limit_'.$limit->value)
+                    ->label($limit->label())
+                    ->getStateUsing(fn (Account $record): string => self::apiLimitSummary($record, $limit)), ApiLimit::cases())),
+
             Section::make(__('admin.accounts.section_members'))
                 ->columnSpanFull()
                 ->schema([
@@ -227,6 +241,24 @@ final class AccountResource extends BaseResource
             'index' => ListAccounts::route('/'),
             'view' => ViewAccount::route('/{record}'),
         ];
+    }
+
+    /**
+     * "valor que vale (plataforma: X; redução do dono: Y)" de um limite.
+     */
+    public static function apiLimitSummary(Account $account, ApiLimit $limit): string
+    {
+        $limits = app(ApiLimits::class);
+
+        return __('admin.accounts.api_limits_summary', [
+            'effective' => number_format($limits->effective($account)->get($limit), 0, ',', '.'),
+            'platform' => $limits->platformOverrides($account)[$limit->value] !== null
+                ? number_format($limits->platform($account)->get($limit), 0, ',', '.')
+                : __('admin.accounts.api_limits_default', ['value' => number_format($limit->default(), 0, ',', '.')]),
+            'own' => ($own = $limits->ownReductions($account)[$limit->value]) !== null
+                ? number_format($own, 0, ',', '.')
+                : __('admin.accounts.api_limits_no_reduction'),
+        ]);
     }
 
     public static function typeLabel(Account $account): string

@@ -108,6 +108,17 @@ return [
         'section_api_keys' => 'Account API keys',
         'no_projects' => 'No projects.',
         'no_api_keys' => 'No keys.',
+        'section_api_limits' => 'API limits',
+        'api_limits_enabled' => 'What applies to this account: the lower of the platform value and the reduction chosen by the owner.',
+        'api_limits_disabled' => 'Per-account limits are turned off in this installation (API_LIMITS_ENABLED); the values are kept for when they are turned on.',
+        'api_limits_summary' => ':effective (platform: :platform; owner: :own)',
+        'api_limits_default' => 'default, :value',
+        'api_limits_no_reduction' => 'no reduction',
+        'api_limits_edit' => 'API limits',
+        'api_limits_heading' => 'API limits for this account',
+        'api_limits_description' => 'What the platform gives this account. An empty field goes back to the installation default. If the owner chose a lower value, theirs applies.',
+        'api_limits_save' => 'Save limits',
+        'api_limits_saved' => 'API limits saved.',
     ],
 
     'api_keys' => [

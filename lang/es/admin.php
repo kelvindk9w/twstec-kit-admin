@@ -108,6 +108,17 @@ return [
         'section_api_keys' => 'Claves de API de la cuenta',
         'no_projects' => 'Ningún proyecto.',
         'no_api_keys' => 'Ninguna clave.',
+        'section_api_limits' => 'Límites de la API',
+        'api_limits_enabled' => 'Lo que vale para esta cuenta: el menor entre el valor de la plataforma y la reducción elegida por el dueño.',
+        'api_limits_disabled' => 'Los límites por cuenta están desactivados en esta instalación (API_LIMITS_ENABLED); los valores se guardan para cuando se activen.',
+        'api_limits_summary' => ':effective (plataforma: :platform; dueño: :own)',
+        'api_limits_default' => 'predeterminado, :value',
+        'api_limits_no_reduction' => 'sin reducción',
+        'api_limits_edit' => 'Límites de la API',
+        'api_limits_heading' => 'Límites de la API de esta cuenta',
+        'api_limits_description' => 'Lo que la plataforma da a esta cuenta. Un campo vacío vuelve al valor predeterminado de la instalación. Si el dueño eligió un valor menor, vale el suyo.',
+        'api_limits_save' => 'Guardar límites',
+        'api_limits_saved' => 'Límites de la API guardados.',
     ],
 
     'api_keys' => [
